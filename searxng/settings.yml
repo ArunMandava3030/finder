@@ -1,0 +1,35 @@
+# Local development setup. See https://docs.searxng.org/admin/settings/settings.html
+use_default_settings:
+  engines:
+    keep_only:
+      - google
+      - bing
+      - duckduckgo
+
+general:
+  instance_name: "Elsewhere search"
+  enable_metrics: false
+
+search:
+  safe_search: 1
+  default_lang: "en"
+  formats:
+    - html
+    - json
+
+server:
+  limiter: false
+  public_instance: false
+  image_proxy: false
+
+engines:
+  - name: google
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: duckduckgo
+    disabled: false
+
+outgoing:
+  request_timeout: 8.0
+  max_request_timeout: 12.0

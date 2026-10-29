@@ -1,0 +1,31 @@
+{
+  "name": "elsewhere-place-finder",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "dev:server": "concurrently -k -n web,api -c cyan,yellow \"vite --host 127.0.0.1 --mode server\" \"node --watch server/index.mjs\"",
+    "build": "vite build",
+    "build:pages": "vite build --base=/finder/ --mode pages",
+    "build:server": "vite build --mode server",
+    "start": "node server/index.mjs",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --test tests/*.test.mjs",
+    "test:ui": "playwright test",
+    "test:pages": "playwright test --config=playwright.public.config.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@vitejs/plugin-react": "^5.0.4",
+    "concurrently": "^9.2.1",
+    "vite": "^7.1.12"
+  }
+}
