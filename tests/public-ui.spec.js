@@ -102,7 +102,7 @@ test('a compact hashtag retrieves public travel guides without credentials', asy
   await expect(page.getByText('TAVILY_API_KEY', { exact: false })).toHaveCount(0);
   await page.getByRole('button', { name: /Field guide/ }).click();
   await expect(page.locator('.place-card')).toHaveCount(6);
-  await expect(page.getByRole('heading', { name: 'Paradise Beach' })).toBeVisible();
+  await expect(page.locator('.place-card').getByRole('heading', { name: 'Paradise Beach' })).toBeVisible();
   await page.getByRole('button', { name: /Travel guides/ }).click();
   await expect(page.locator('.web-result a[href="https://en.wikivoyage.org/wiki/Gokarna"]').first()).toBeVisible();
 });
@@ -197,4 +197,50 @@ test('the home and public search views fit desktop and small phones', async ({ p
     await page.setViewportSize({ width, height: initialViewport.height });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
+});
+
+const indexFixture = {
+  schemaVersion: 1,
+  destinations: [
+    { id: 'gokarna', city: 'Gokarna', aliases: [], state: 'Karnataka', count: 1, status: 'partial', fetchedAt: '2026-10-28T10:00:00Z', attemptedAt: '2026-10-30T10:00:00Z', providers: [{ provider: 'wikivoyage', status: 'ok', count: 1 }, { provider: 'osm', status: 'unavailable', count: 0 }], warnings: ['The map source was unavailable.'], discussionStatus: { status: 'error' } },
+    { id: 'hampi', city: 'Hampi', aliases: [], state: 'Karnataka', count: 1, status: 'ok' },
+  ],
+  places: [
+    { id: 'g1', destinationId: 'gokarna', city: 'Gokarna', state: 'Karnataka', name: 'Test Coastal Cove', category: 'Beaches', description: 'A secluded cove described by the community guide.', coordinates: { lat: 14.5, lng: 74.3 }, discovery: { label: 'Offbeat signal found', score: 70, confidence: 'low', reasons: ['A source describes it as secluded'] }, sources: [{ publisher: 'Wikivoyage', title: 'Gokarna cove', url: 'https://en.wikivoyage.org/wiki/Gokarna', retrievedAt: '2026-10-28T10:00:00Z', updatedAt: '2026-09-01T10:00:00Z', license: 'CC BY-SA 4.0' }] },
+    { id: 'h1', destinationId: 'hampi', city: 'Hampi', state: 'Karnataka', name: 'Test Hampi Temple', category: 'Culture', description: 'A named temple.', discovery: { label: 'Worth investigating', score: 40, confidence: 'low', reasons: [] }, sources: [{ publisher: 'Wikivoyage', url: 'https://en.wikivoyage.org/wiki/Hampi' }] },
+  ],
+  discussions: [],
+};
+
+test('the collected index searches real place records and exposes source age and missing reviews', async ({ page }) => {
+  await mockWikimedia(page);
+  await page.route('**/data/india-index.json', route => route.fulfill({ json: indexFixture }));
+  await page.goto('./');
+  const index = page.getByRole('region', { name: 'Explore the India place index' });
+  await expect(index.locator('.india-place')).toHaveCount(1);
+  await expect(index.getByText('Test Coastal Cove', { exact: true })).toBeVisible();
+  await index.getByText('Sources & why it appears', { exact: true }).click();
+  await expect(index.getByText(/Collected 28 Oct 2026 · Source updated 1 Sept 2026/)).toBeVisible();
+  await expect(index.getByText(/Visitor ratings are not available/)).toBeVisible();
+  await expect(index.getByText(/Discussion search was unavailable/)).toBeVisible();
+  await page.getByLabel('Index destination').selectOption('');
+  await expect(index.locator('.india-place')).toHaveCount(2);
+  await page.getByLabel('Index destination').selectOption('hampi');
+  await expect(index.getByText('Test Hampi Temple', { exact: true })).toBeVisible();
+  await expect(index.getByText('Test Coastal Cove', { exact: true })).toHaveCount(0);
+  await searchFor(page, '#hiddenplacegokarna');
+  await expect(index.getByText('Test Coastal Cove', { exact: true })).toBeVisible();
+  await expect(index.getByText('Test Hampi Temple', { exact: true })).toHaveCount(0);
+  await page.getByLabel('Index category').selectOption('Culture');
+  await expect(index.locator('.india-place')).toHaveCount(0);
+});
+
+test('an unavailable index leaves the rest of the static site usable', async ({ page }) => {
+  await mockWikimedia(page);
+  await page.route('**/data/india-index.json', route => route.fulfill({ status: 503, body: 'Unavailable' }));
+  await page.goto('./');
+  await expect(page.getByText(/collected place index couldn’t load/)).toBeVisible();
+  await expect(page.locator('.place-card')).toHaveCount(6);
+  await searchFor(page, 'Gokarna');
+  await expect(page.locator('.web-result').first()).toBeVisible();
 });

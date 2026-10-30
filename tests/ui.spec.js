@@ -58,7 +58,7 @@ test('a compact Gokarna hashtag shows the sourced guide and connection notice', 
   await searchFor(page, '#hiddenplacegokarna');
   await expect(page.getByRole('status')).toContainText('Live search is not connected yet');
   await expect(page.locator('.place-card')).toHaveCount(6);
-  await expect(page.getByRole('heading', { name: 'Paradise Beach' })).toBeVisible();
+  await expect(page.locator('.place-card').getByRole('heading', { name: 'Paradise Beach' })).toBeVisible();
   await page.getByRole('button', { name: 'Connect search', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Connect live search' })).toBeVisible();
   await expect(page.getByRole('dialog')).toContainText('TAVILY_API_KEY');

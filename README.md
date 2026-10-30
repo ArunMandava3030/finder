@@ -1,123 +1,92 @@
 # Elsewhere
 
-A place-discovery website for finding quieter corners of a city. Search `hidden places in Gokarna` or `#hiddenplacegokarna`, explore source-linked travel guides, and save places for later.
+A place-discovery website for exploring quieter corners of Indian cities. Search `hidden places in Gokarna` or `#hiddenplacegokarna`, browse source-linked places and travel guides, and save places for later.
 
-The default website runs entirely in the browser and on GitHub Pages. **No API key or backend is required.** It combines a curated field guide with live Wikipedia and Wikivoyage searches. Links to broader web and social searches open those services separately; they do not import their results, reviews, or comments into Elsewhere.
+The website is hosted on **GitHub Pages with no API keys or paid backend**. A scheduled GitHub Actions job collects an India destination index and publishes it with the frontend. Visitors search that snapshot in the browser; optional Wikipedia and Wikivoyage searches provide additional public guides.
 
-GitHub Pages deployment target: [ArunMandava3030.github.io/finder](https://ArunMandava3030.github.io/finder/).
+Live site: [ArunMandava3030.github.io/finder](https://ArunMandava3030.github.io/finder/).
 
 ## Run locally
 
-Install Node.js 22.12 or later, then run:
+Install Node.js 22.12 or later:
 
 ```powershell
 npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). This starts the Vite frontend in public search mode. You do not need an `.env` file for the default setup.
+Open [http://localhost:5173](http://localhost:5173). The repository includes a source-linked snapshot, so Python, an API key, and an `.env` file are unnecessary for browsing or frontend development.
 
-To preview a production build:
-
-```powershell
-npm run build
-npm run preview
-```
-
-Open [http://localhost:4173](http://localhost:4173). Public guide searches work in this static preview too.
-
-## What search includes
-
-- **Field guide:** curated places, published reference links, attributed destination photographs, and clearly identified illustrative scenery.
-- **Public guides:** live Wikipedia and Wikivoyage results retrieved through their public MediaWiki APIs, with links to the original articles.
-- **Broader discovery:** external searches for web pages, Reddit discussions, and Instagram pages. These links navigate to another service's results; Elsewhere does not retrieve or summarize those reviews.
-- **Saved places:** browser `localStorage` bookmarks, with no account, database, or cross-device sync.
-
-Guide search sends your query directly to Wikimedia services. These requests use MediaWiki's documented [unauthenticated cross-origin API access](https://www.mediawiki.org/wiki/API:Cross-site_requests). Public API availability, coverage, and rate limits can affect results. Curated places remain separate from fetched guides, and the interface reports empty results or failures.
-
-The website does not crawl the whole internet, scrape Instagram or Reddit automatically, access private posts, or invent ratings and visitor reviews. Open the original articles or external search results for full context and current visitor advice.
-
-## GitHub Pages deployment
-
-The workflow in [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) runs on pushes to `main` and can also be started from the Actions tab. It installs dependencies, runs the unit tests, builds the static frontend, and deploys the `dist` artifact to GitHub Pages.
-
-In the repository, set **Settings → Pages → Build and deployment → Source → GitHub Actions**. No custom GitHub secret is required. The workflow provides:
-
-```dotenv
-VITE_SEARCH_MODE=public
-VITE_BASE_PATH=/finder/
-```
-
-The base path keeps scripts, styles, images, and the favicon under `/finder/`. For a renamed repository or a custom domain, update `VITE_BASE_PATH` in the workflow to match its deployment path. See the [official Vite Pages guide](https://vite.dev/guide/static-deploy.html#github-pages).
-
-To reproduce the Pages build locally:
+Preview the GitHub Pages build:
 
 ```powershell
 npm run build:pages
 npm run preview -- --base=/finder/
 ```
 
-Open [http://localhost:4173/finder/](http://localhost:4173/finder/). `build:pages` selects public search mode and the `/finder/` base path without changing your terminal environment. GitHub Pages serves the frontend only and does not run the optional Express API.
+Open [http://localhost:4173/finder/](http://localhost:4173/finder/). For a site hosted at the domain root instead, use `npm run build` and `npm run preview`.
 
-## Optional server search
+## Data and search
 
-For a separate full server deployment, the repository also contains an Express integration for a self-hosted [SearXNG](https://github.com/searxng/searxng) metasearch service. This optional mode is independent of the default GitHub Pages site.
+| Source | What Elsewhere uses | Limits |
+| --- | --- | --- |
+| OpenStreetMap through Overpass | Named points of interest, categories, coordinates, source links | Mapped coverage varies; shared APIs can be unavailable or rate limited. |
+| Wikivoyage | Destination listings, descriptions, coordinates where available, and source attribution | Community guide descriptions are not individual visitor reviews. |
+| DDGS search indexes | Destination-relevant links to publicly indexed Reddit discussion threads | Results can be empty, blocked, incomplete, or stale. No Reddit comment threads are fetched. |
+| Wikipedia and Wikivoyage browser search | Additional public guide results with original article links | Requires access to Wikimedia APIs when the visitor searches. |
+| Curated field guide | Selected places and attributed destination photos or clearly marked illustrative scenery | Editorial starting points, separate from collected source coverage. |
 
-Copy `.env.example` to `.env` once, or edit an existing `.env` without overwriting it:
+The scheduled collector combines source records, keeps their URLs and collection dates, and writes `public/data/india-index.json`. It processes destinations serially and bounds upstream requests. The browser reads this published file; GitHub Pages does not run a Python or Express server.
 
-```powershell
-Copy-Item .env.example .env
-```
+Discussion collection uses Indian-region search and a requested year filter. It checks for destination words and genuine Reddit thread URLs before exporting a neutral label and link. User-written Reddit titles, excerpts, comments, author details, and ratings are discarded. A search engine's freshness filter does not establish a post's publication date, so unknown publication dates remain unknown.
 
-Set:
+The initial snapshot also includes a small set of manually checked public discussion links, marked `collectionMethod: manual_search`. These keep their original discovery timestamps and any publication dates established from the source; a known calendar date is stored without inventing a publication time. They are starting links, not permanent seeds: a successful later discussion search can replace them, while search failures retain them with an earlier-collection label.
 
-```dotenv
-VITE_SEARCH_MODE=server
-VITE_BASE_PATH=/
-SEARXNG_URL=http://localhost:8080
-TAVILY_API_KEY=
-PORT=3001
-```
+**Discovery fit is a rule-based estimate, not proof that a place is hidden, safe, underrated, or worth visiting.** It uses available descriptions, location/category signals, and source corroboration. Missing reviews or low web coverage do not prove that a place is undiscovered. The interface exposes source links, collection status, and the reasons behind its estimate.
 
-Start your own SearXNG instance. An optional local Docker configuration is included; with Docker Desktop running in Linux container mode:
+No verified visitor ratings or direct reviews are supplied. Broader web, Reddit, and Instagram search links open those services separately; their results and reviews are not automatically imported. Direct Reddit API access requires [approval and authentication](https://support.reddithelp.com/hc/en-us/articles/16160319875092-Reddit-Data-API-Wiki). Private posts and content behind access controls are outside the collector's coverage.
 
-```powershell
-$env:SEARXNG_SECRET = node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))"
-docker compose up -d
-npm run dev:server
-```
+Saved places use browser `localStorage`; there is no account or cross-device sync. Additional guide searches send the query directly to Wikimedia using its documented [public cross-origin API access](https://www.mediawiki.org/wiki/API:Cross-site_requests).
 
-The generated secret stays in the terminal environment. Generate it again before using Compose in a new terminal, or store it as `SEARXNG_SECRET` in your untracked `.env`. No secret is included in the repository.
+## Refresh and deployment
 
-Open [http://localhost:5173](http://localhost:5173). In this mode, Vite forwards `/api` requests to Express on port 3001. Restart after changing environment variables. Keep `PORT=3001` during development or update the Vite proxy target to match.
+[The Pages workflow](.github/workflows/deploy-pages.yml) runs on pushes to `main`, manual dispatch, and a schedule of **00:17, 06:17, 12:17, and 18:17 UTC**. GitHub schedules are best effort and can be delayed; public repository schedules can be disabled after inactivity. See [GitHub's schedule documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
 
-The included SearXNG service binds to `127.0.0.1:8080` and enables JSON responses. Check it with:
+Each run:
 
-```powershell
-Invoke-RestMethod 'http://localhost:8080/search?q=Gokarna&format=json'
-docker compose logs --tail 100 searxng
-```
+1. Installs Node/Python dependencies and runs the unit tests.
+2. Attempts to restore a newer last-published index from this project's fixed Pages URL, with size, schema, date, and link validation. If it cannot, it keeps the repository snapshot.
+3. Prepares destination queries, checks public search indexes, and refreshes OpenStreetMap/Wikivoyage records.
+4. Retains previous records when providers fail, keeping their source timestamps and reporting unavailable or stale coverage.
+5. Builds the static site and deploys its artifact to GitHub Pages.
 
-Use `docker compose restart searxng` after configuration changes and `docker compose down` to stop it. This configuration is for local use; its public-instance limiter is disabled. Your instance still depends on upstream search engines and can encounter blocks, CAPTCHAs, or rate limits. Existing instances must enable `json` in `search.formats`; see the [SearXNG API documentation](https://docs.searxng.org/dev/search_api.html).
+A scheduled refresh is not a guarantee of new places or new discussion links. The index generation time describes a build; individual source timestamps describe when data was collected. A failed provider must not make older records look newly retrieved. Generated updates are published in the Pages artifact, not automatically committed to Git.
 
-The optional backend also supports `TAVILY_API_KEY` for an existing Tavily account. A nonempty key takes precedence over SearXNG; neither this key nor that service is needed for the public website. Keep all secrets in server environment variables, never in a `VITE_` variable. The integration references are [SearXNG's official repository](https://github.com/searxng/searxng) and [Tavily's official JavaScript repository](https://github.com/tavily-ai/tavily-js).
+In the repository, set **Settings → Pages → Build and deployment → Source → GitHub Actions**. No custom GitHub secrets are needed. The workflow sets `VITE_SEARCH_MODE=public` and `VITE_BASE_PATH=/finder/`. The build has a 25-minute limit, and dependency/build/test failures stop deployment. Collection failures allow a valid previous snapshot to remain available.
 
-To run a built server-mode site after setting the environment above:
+The workflow uses official GitHub actions pinned to commit SHAs. The path keeps scripts, styles, images, and the favicon under `/finder/`; update it if the repository name changes. See the [Vite Pages guide](https://vite.dev/guide/static-deploy.html#github-pages).
+
+To refresh data locally, install Python 3.13 and use a virtual environment:
 
 ```powershell
-npm run build:server
-npm start
+python -m venv .local/search-venv
+& ./.local/search-venv/Scripts/python.exe -m pip install -r search-service/requirements-dev.txt
+npm run data:queries
+& ./.local/search-venv/Scripts/python.exe search-service/search_batch.py --input .local/discussion-queries.json --output .local/discussion-results.json
+npm run data:refresh -- --evidence .local/discussion-results.json
 ```
 
-Express serves the built frontend and API at [http://localhost:3001](http://localhost:3001). A public server deployment needs its own hosting; this mode cannot run on GitHub Pages. The server includes per-process caching and rate limits; a shared deployment should provide authentication and shared limits appropriate to its upstream service.
+On macOS/Linux, the virtual environment's executable is `.local/search-venv/bin/python`. To collect only place sources, run `npm run data:refresh`. To limit place collection, use `npm run data:refresh -- --destinations gokarna,hampi`. To merge a validated discussion batch into the existing index without collecting places, pass `--destinations none --evidence .local/discussion-results.json`.
 
-The optional API exposes `GET /api/health` and `GET /api/search?q=Gokarna&source=all`. Valid source filters are `all`, `web`, `reddit`, and `instagram`; queries are 2–160 characters. Results link to publicly indexed pages and may include source excerpts. They do not represent complete comment threads or exhaustive reviews. A missing provider returns `503 SEARCH_NOT_CONFIGURED`, invalid input returns `400`, rate limits return `429`, and upstream failure or timeout returns `502` or `504`.
+The collector does not use paid search keys, proxies, CAPTCHA workarounds, or automatic retries. Its dependencies and source adapters are based on [deedy5/ddgs](https://github.com/deedy5/ddgs), the [Overpass API](https://github.com/drolbr/Overpass-API), and the [MediaWiki API](https://www.mediawiki.org/wiki/API:Main_page). DDGS is an unofficial search-index client and depends on upstream availability. The [search component README](search-service/README.md) documents its bounded batch contract and optional local HTTP interface.
 
 ## Sources and attribution
 
-Live guide excerpts come from Wikipedia and Wikivoyage contributors. Each result links to the source article, whose history identifies contributors and whose page provides the applicable license. Wikivoyage text is available under [CC BY-SA 4.0](https://en.wikivoyage.org/wiki/Wikivoyage:Copyleft); Wikipedia reuse terms are described in the [Wikimedia Terms of Use](https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use#7._Licensing_of_Content). Keep article attribution and applicable license notices when reusing that text.
+OpenStreetMap data is attributed to OpenStreetMap contributors and available under the [Open Database License](https://www.openstreetmap.org/copyright). Preserve attribution and applicable database share-alike obligations when redistributing it.
 
-Destination photographs have individual source and license credits in the place details. Other scenery is identified as illustrative. These text and image licenses apply to the respective source material, not automatically to unrelated project code.
+Wikivoyage text comes from its contributors under [CC BY-SA 4.0](https://en.wikivoyage.org/wiki/Wikivoyage:Copyleft). Source article links identify the original context and provide access to contributor histories; collected excerpts carry source and license references. Additional Wikipedia excerpts follow the applicable [Wikimedia reuse terms](https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use#7._Licensing_of_Content). Retain article attribution and applicable license notices when reusing or adapting source text.
+
+Destination photographs have their own source and license credits in place details. Other scenery is identified as illustrative. Source text, data, and image licenses apply to those materials, not automatically to unrelated project code.
 
 ## Checks
 
@@ -127,16 +96,17 @@ npm run build:pages
 npm run test:pages
 ```
 
-This checks the default public website. To check the optional server-mode interface separately:
+Run the Python tests from `search-service` so its modules are on the import path:
 
 ```powershell
-npm run build:server
-npm run test:ui
+Push-Location search-service
+& ../.local/search-venv/Scripts/python.exe -m unittest discover -s tests -v
+Pop-Location
 ```
 
-Each browser suite needs its corresponding build: `test:pages` uses the public Pages build, while `test:ui` uses the server build. Browser tests use controlled responses to check interactions without paid API calls. They exercise desktop and mobile layouts, bookmarks, filters, source links, and search states. Preview screenshots are written to the ignored `.local/` directory.
+The Node suite covers data normalization, ranking, source failures, and snapshot restoration. Python tests use controlled search responses for query bounds, relevance, thread links, text removal, pacing, and error handling. Browser tests exercise public search, filters, saved places, source links, and desktop/mobile layouts with controlled responses.
 
-The browser configuration uses project-local Chromium when available on Windows, otherwise installed Microsoft Edge. On other systems, run `npx playwright install chromium` first. If Edge automation is unavailable, install a separate test browser locally:
+Browser tests need the corresponding frontend build. On Linux/macOS, install Chromium first with `npx playwright install chromium`. On Windows the configuration uses a project-local Chromium installation when available, otherwise Microsoft Edge:
 
 ```powershell
 $env:PLAYWRIGHT_BROWSERS_PATH = '.local/ms-playwright'
@@ -145,4 +115,36 @@ npm run build:pages
 npm run test:pages
 ```
 
-Public API requests and optional SearXNG connectivity also depend on the local network; perform a real search to check that connection.
+Screenshots and local collector outputs stay in ignored `.local/`. Offline tests do not prove that a public search engine or community API is currently reachable.
+
+## Optional full server mode
+
+The repository also retains an Express search integration for separate local or server deployments. It is not used by the GitHub Pages site or scheduled data refresh.
+
+Copy `.env.example` to `.env` only if no local file already exists. Set `VITE_SEARCH_MODE=server`, `VITE_BASE_PATH=/`, `PORT=3001`, and `SEARXNG_URL=http://localhost:8080`. A self-hosted [SearXNG](https://github.com/searxng/searxng) instance must enable JSON output; see its [search API documentation](https://docs.searxng.org/dev/search_api.html).
+
+The included local Docker Compose setup requires a generated secret:
+
+```powershell
+$env:SEARXNG_SECRET = node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))"
+docker compose up -d
+npm run dev:server
+```
+
+SearXNG binds to `127.0.0.1:8080`. Its local limiter is disabled, and upstream engines can still block or rate-limit requests. Use `docker compose down` to stop it. Generate the secret again for a new terminal or keep it in your untracked `.env`.
+
+This optional API also accepts an existing `TAVILY_API_KEY`, which takes precedence over SearXNG. It is unnecessary for the selected Pages architecture. Secrets belong only in server environment variables, never `VITE_` values.
+
+For the server build and its separate browser suite:
+
+```powershell
+npm run build:server
+npm run test:ui
+npm start
+```
+
+Express serves the frontend and API at [http://localhost:3001](http://localhost:3001). The server exposes `GET /api/health` and `GET /api/search?q=Gokarna&source=all`. It needs a separate runtime if publicly deployed; GitHub Pages hosts static files only.
+
+The collection engine also exposes `GET /api/destinations`, `GET /api/discover?q=Gokarna`, and `GET /api/evidence?q=Half%20Moon%20Beach%20Gokarna`. Discovery combines bounded source requests, deduplicates places, and caches observations on disk. Failed sources retain their original dates; successful sources replace obsolete records. API requests share a rate limit and have deadlines and concurrency limits.
+
+For optional live evidence, `DDGS_URL` points to the local Python service described in its README. Direct Reddit access additionally needs an approved app and the server-only `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, and `REDDIT_USER_AGENT` variables. Discussion content stays in a short-lived memory cache and is never included in static exports. These optional services are not required or deployed for Pages.

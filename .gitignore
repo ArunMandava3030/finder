@@ -10,3 +10,6 @@ playwright-report/
 .sf/
 .agents/
 .codex/
+__pycache__/
+*.py[cod]
+.venv/

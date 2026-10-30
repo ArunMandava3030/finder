@@ -1,0 +1,33 @@
+.india-discovery { margin: 24px 0 36px; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: #fffefa; }
+.india-index-heading { display: flex; justify-content: space-between; gap: 20px; align-items: center; flex-wrap: wrap; }
+.india-index-heading h3 { margin: 8px 0; font: 32px var(--serif); }
+.india-index-heading > span, .india-explanation, .india-attribution, .india-coverage { color: #60685f; font-size: 13px; line-height: 1.65; }
+.india-controls { display: flex; gap: 20px; flex-wrap: wrap; align-items: end; margin: 22px 0 16px; }
+.india-controls label { display: grid; gap: 7px; font-size: 12px; }
+.india-controls select { padding: 10px; background: white; border: 1px solid var(--line); border-radius: 5px; max-width: 100%; color: var(--ink); }
+.india-controls .india-offbeat { display: flex; align-items: center; gap: 8px; padding: 10px 0; }
+.india-offbeat input { accent-color: #54715a; }
+.india-coverage > span { margin-left: 10px; color: #95602a; }
+.india-coverage details { margin: 8px 0 18px; }
+.india-discovery summary { cursor: pointer; font-size: 12px; }
+.india-discovery details p { font-size: 12px; line-height: 1.6; }
+.india-place-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.india-place { min-width: 0; border-top: 1px solid var(--line); padding: 18px 0; overflow-wrap: anywhere; }
+.india-place h4 { font-size: 18px; margin: 9px 0; }
+.india-place > p { font-size: 13px; line-height: 1.65; color: #60685f; max-height: 128px; overflow: auto; padding-right: 5px; }
+.india-place-meta { font-size: 11px; color: #6a7569; }
+.india-place-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 0; font-size: 11px; }
+.india-place-actions > span { padding: 5px 8px; background: #edf1e8; border-radius: 4px; }
+.india-place-actions a { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.india-place details ul { padding-left: 18px; font-size: 12px; line-height: 1.7; }
+.india-source { margin-top: 14px; font-size: 12px; line-height: 1.6; }
+.india-source small { display: block; margin-top: 4px; color: #6a7569; }
+.india-more { margin: 10px 0 20px; }
+.india-discussions { border-top: 1px solid var(--line); padding-top: 12px; font-size: 13px; line-height: 1.7; }
+.india-discussions h4 { margin-bottom: 6px; }
+.india-discussions small { color: #6a7569; }
+.india-discussions ul { padding-left: 18px; }
+.india-attribution { margin-bottom: 0; font-size: 11px; }
+.india-empty { padding: 20px 0; line-height: 1.7; }
+@media (max-width: 900px) { .india-place-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .india-discovery { padding: 16px; } .india-place-grid { grid-template-columns: minmax(0, 1fr); } .india-index-heading h3 { font-size: 27px; } .india-controls { gap: 12px; } .india-controls label { width: 100%; } }

@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { places } from "./data/places.js";
 import { searchPublicGuides } from "./lib/public-search.js";
+import IndiaDiscovery from "./components/IndiaDiscovery.jsx";
 import {
   categories,
   filterPlaces,
@@ -641,6 +642,8 @@ export default function App() {
             </span>
           </div>
 
+          {!savedView && <IndiaDiscovery query={query} />}
+
           {(query || savedView) && (
             <div className="result-tabs">
               {!savedView && (
@@ -1214,7 +1217,7 @@ export default function App() {
                 <h3>Follow real sources</h3>
                 <p>
                   {PUBLIC_SEARCH
-                    ? "Browse our sourced field guide or search Wikipedia and Wikivoyage directly. Every result links to its original page. Follow the external search links for broader web and social conversations."
+                    ? "Explore the periodically collected India index for named places, mapped locations, source dates, and community travel advice. Every place explains why it appears. You can also search Wikipedia and Wikivoyage directly."
                     : "Browse our sourced field guide or use live search for travel pages and publicly indexed Reddit and Instagram posts. Every result links back to its source."}
                 </p>
               </div>
@@ -1263,7 +1266,7 @@ export default function App() {
             </p>
             <p>
               {PUBLIC_SEARCH
-                ? "Live guide search queries Wikipedia and Wikivoyage without an API key. These community-written guides can suggest places to see and things to do. The web, Reddit, and Instagram buttons open external search pages; they do not import social posts or reviews into this site."
+                ? "The India index combines community travel listings and available OpenStreetMap data. Refreshes are scheduled every six hours, with source dates and collection gaps shown. Traveller discussions link to their original threads; we do not import social comments or ratings. You can also search Wikipedia and Wikivoyage directly without an API key."
                 : "Live search uses a configured search provider. It can surface public travel pages and indexed social conversations, but cannot cover every page or private post."}
             </p>
             <p>

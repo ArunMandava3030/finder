@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
 
 permissions:
   contents: read
@@ -15,6 +17,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: read
       pages: read
@@ -31,11 +34,47 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
 
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: search-service/requirements*.txt
+
       - name: Install dependencies
         run: npm ci
 
       - name: Run tests
         run: npm test
+
+      - name: Install search collector dependencies
+        run: python -m pip install -r search-service/requirements-dev.txt
+
+      - name: Test search collector
+        working-directory: search-service
+        run: python -m unittest discover -s tests -v
+
+      - name: Restore last published index
+        run: node scripts/load-last-index.mjs
+
+      - name: Prepare destination search queries
+        run: npm run data:queries
+
+      - name: Find indexed traveller discussion links
+        continue-on-error: true
+        timeout-minutes: 6
+        run: python search-service/search_batch.py --input .local/discussion-queries.json --output .local/discussion-results.json
+
+      - name: Refresh India places and source links
+        continue-on-error: true
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          if [ -f .local/discussion-results.json ]; then
+            npm run data:refresh -- --evidence .local/discussion-results.json
+          else
+            npm run data:refresh
+          fi
 
       - name: Build public site
         run: npm run build
