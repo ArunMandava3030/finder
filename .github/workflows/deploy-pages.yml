@@ -58,14 +58,17 @@ jobs:
         run: node scripts/load-last-index.mjs
 
       - name: Prepare destination search queries
+        if: github.event_name != 'push'
         run: npm run data:queries
 
       - name: Find indexed traveller discussion links
+        if: github.event_name != 'push'
         continue-on-error: true
         timeout-minutes: 6
         run: python search-service/search_batch.py --input .local/discussion-queries.json --output .local/discussion-results.json
 
       - name: Refresh India places and source links
+        if: github.event_name != 'push'
         continue-on-error: true
         timeout-minutes: 15
         shell: bash

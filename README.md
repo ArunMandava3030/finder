@@ -60,7 +60,9 @@ Each run:
 4. Retains previous records when providers fail, keeping their source timestamps and reporting unavailable or stale coverage.
 5. Builds the static site and deploys its artifact to GitHub Pages.
 
-A scheduled refresh is not a guarantee of new places or new discussion links. The index generation time describes a build; individual source timestamps describe when data was collected. A failed provider must not make older records look newly retrieved. Generated updates are published in the Pages artifact, not automatically committed to Git.
+A scheduled refresh is not a guarantee of new places or new discussion links. The index generation time describes a build; individual source timestamps describe when data was collected. A failed provider must not make older records look newly retrieved. Empty or failed discussion searches retain earlier link-only observations for up to 30 days, marked stale; a successful non-empty search replaces that destination's links. Generated updates are published in the Pages artifact, not automatically committed to Git.
+
+Upstream collection runs on the six-hour schedule and manual dispatch. Code pushes test and deploy the latest available snapshot without making another round of requests to shared data services.
 
 In the repository, set **Settings → Pages → Build and deployment → Source → GitHub Actions**. No custom GitHub secrets are needed. The workflow sets `VITE_SEARCH_MODE=public` and `VITE_BASE_PATH=/finder/`. The build has a 25-minute limit, and dependency/build/test failures stop deployment. Collection failures allow a valid previous snapshot to remain available.
 

@@ -5,6 +5,7 @@ import { createDiscoveryEngine } from '../server/discovery/engine.mjs';
 import { destinations } from '../server/discovery/destinations.mjs';
 import { setTimeout as pause } from 'node:timers/promises';
 import { rankPlaces } from '../server/discovery/rank.mjs';
+import { retainEarlierDiscussionLinks } from '../server/discovery/discussions.mjs';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : fallback; };
@@ -68,8 +69,8 @@ if (evidenceFile) {
     const record = records.get(result.id);
     if (record) record.discussionStatus = { status: result.status, fetchedAt: batch.generatedAt, warnings: result.warnings || [] };
     // An unavailable search must not erase the last useful links or make them look newly collected.
-    if (result.status === 'error') {
-      discussions = discussions.map(item => item.destinationId === result.id ? { ...item, stale: true } : item);
+    if (result.status === 'error' || result.status === 'empty') {
+      discussions = retainEarlierDiscussionLinks(discussions, result.id);
       continue;
     }
     discussions = discussions.filter(item => item.destinationId !== result.id);
