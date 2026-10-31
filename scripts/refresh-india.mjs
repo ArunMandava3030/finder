@@ -7,11 +7,17 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { rankPlaces } from '../server/discovery/rank.mjs';
 import { retainEarlierDiscussionLinks } from '../server/discovery/discussions.mjs';
 import { readScraplingBatch, mergeScraplingBatch } from '../server/providers/scrapling.mjs';
+import { validateRefreshBatch } from './select-refresh-batch.mjs';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : fallback; };
 const target = option('--output', 'public/data/india-index.json');
-const choice = option('--destinations', 'all');
+const batchFile = option('--batch', null);
+const batchIds = batchFile ? validateRefreshBatch(JSON.parse(await readFile(batchFile, 'utf8')), destinations) : null;
+const choice = batchIds ? batchIds.join(',') || 'none' : option('--destinations', 'all');
+const budgetSeconds = Number(option('--budget-seconds', 720));
+if (!Number.isFinite(budgetSeconds) || budgetSeconds < 1 || budgetSeconds > 7200) throw new Error('Invalid collection time budget.');
+const deadline = Date.now() + budgetSeconds * 1000;
 const selected = choice === 'none' ? [] : choice === 'all' ? destinations : choice.split(',').map(id => {
   const destination = destinations.find(item => item.id === id);
   if (!destination) throw new Error(`Unknown destination: ${id}`);
@@ -49,6 +55,10 @@ for (const destination of selected) {
 
 // Serial batches respect the shared Overpass service; each batch has at most two provider calls.
 for (const destination of selected) {
+  if (Date.now() >= deadline) {
+    console.log('Collection budget reached; publishing completed destinations and retaining unattempted records.');
+    break;
+  }
   if (destination !== selected[0]) await pause(1500);
   console.log(`Collecting ${destination.city}…`);
   try {
@@ -58,11 +68,11 @@ for (const destination of selected) {
     for (const [id, place] of placeMap) if (place.destinationId === destination.id) placeMap.delete(id);
     for (const place of result.places) placeMap.set(keyForPlace(place), place);
     if (result.providers.some(provider => provider.status === 'ok' || provider.status === 'partial')) succeeded += 1;
-    records.set(destination.id, { ...records.get(destination.id), ...destination, count: result.places.length, fetchedAt: result.fetchedAt, attemptedAt: result.attemptedAt || startedAt, status: result.stale ? 'stale' : result.providers.every(provider => provider.status === 'ok') ? 'ok' : 'partial', providers: result.providers, warnings: result.warnings });
+    records.set(destination.id, { ...records.get(destination.id), ...destination, count: result.places.length, fetchedAt: result.fetchedAt, collectionAttemptedAt: new Date().toISOString(), attemptedAt: result.attemptedAt || startedAt, status: result.stale ? 'stale' : result.providers.every(provider => provider.status === 'ok') ? 'ok' : 'partial', providers: result.providers, warnings: result.warnings });
     console.log(`${destination.city}: ${result.places.length} places; ${result.providers.map(provider => `${provider.provider}=${provider.status}`).join(', ')}`);
   } catch (error) {
     const prior = records.get(destination.id);
-    records.set(destination.id, { ...destination, ...prior, attemptedAt: startedAt, status: prior?.count ? 'stale' : 'unavailable', warnings: ['Collection failed; any earlier records retain their original timestamps.'] });
+    records.set(destination.id, { ...destination, ...prior, collectionAttemptedAt: new Date().toISOString(), attemptedAt: startedAt, status: prior?.count ? 'stale' : 'unavailable', warnings: ['Collection failed; any earlier records retain their original timestamps.'] });
     console.log(`${destination.city}: unavailable (${error.code || 'provider error'})`);
   }
 }
@@ -132,7 +142,7 @@ const output = {
   ...(scraping ? { scraping } : {}),
   discussions: [...new Map(discussions.map(item => [`${item.destinationId}:${item.url}`, item])).values()],
   stats: { places: places.length, destinationsWithData: new Set(places.map(place => place.destinationId)).size, refreshedThisRun: succeeded, indexedDiscussions: discussions.length, scrapedPlaces: places.filter(place => place.sources.some(source => source.provider === 'scrapling')).length, quieterCandidates: places.filter(place => place.crowd?.status === 'quieter').length },
-  methodology: { version: 2, scoreLabel: 'Discovery fit', explanation: 'Quieter recommendations require explicit place-specific crowd evidence. Crowd classifications and reported levels take priority over the secondary discovery score. Map coverage, scenery, hidden-gem language, and missing reviews do not establish fewer visitors.', reviews: 'No verified visitor ratings are available. Community guide descriptions and indexed discussion links are distinct from reviews.', freshness: 'Source-reported crowd conditions, not live headcounts. Collection dates record when a page was read, not a visit date; source publication dates and contextual limits remain separate.' },
+  methodology: { version: 3, scoreLabel: 'Discovery fit', explanation: 'Quieter recommendations require explicit place-specific crowd evidence. Crowd classifications and reported levels take priority over the secondary discovery score. Map coverage, scenery, hidden-gem language, and missing reviews do not establish fewer visitors.', reviews: 'No verified visitor ratings are available. Community guide descriptions and indexed discussion links are distinct from reviews.', freshness: 'Source-reported crowd conditions, not live headcounts. Collection dates record when a page was read, not a visit date; source publication dates and contextual limits remain separate.' },
   attribution: [
     { name: 'OpenStreetMap contributors', license: 'ODbL', url: 'https://www.openstreetmap.org/copyright' },
     { name: 'Wikivoyage contributors', license: 'CC BY-SA 4.0', url: 'https://en.wikivoyage.org/wiki/Wikivoyage:Copyleft' },

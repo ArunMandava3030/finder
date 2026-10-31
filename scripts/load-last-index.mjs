@@ -32,7 +32,7 @@ export function validateIndex(index) {
   for (const destination of index.destinations) {
     requireValid(destination && shortText(destination.id, 100) && !destinationIds.has(destination.id));
     requireValid(shortText(destination.city, 200) && shortText(destination.state, 200));
-    requireValid(optionalDate(destination.fetchedAt) && optionalDate(destination.attemptedAt));
+    requireValid(optionalDate(destination.fetchedAt) && optionalDate(destination.attemptedAt) && optionalDate(destination.collectionAttemptedAt));
     if (destination.discussionStatus) requireValid(optionalDate(destination.discussionStatus.fetchedAt));
     if (destination.providers) {
       requireValid(Array.isArray(destination.providers) && destination.providers.length <= 10);

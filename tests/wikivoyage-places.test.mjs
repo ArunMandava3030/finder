@@ -11,17 +11,35 @@ const responseFor = (content, extras = {}) => new Response(JSON.stringify({ quer
   revisions: [{ timestamp: metadata.updatedAt, slots: { main: { content } } }], ...extras,
 }] } }), { headers: { 'content-type': 'application/json' } });
 
-test('India destinations have unique IDs, canonical wiki titles, aliases, and valid region windows', () => {
-  assert.equal(destinations.length, 25);
-  assert.equal(new Set(destinations.map(destination => destination.id)).size, 25);
-  assert.ok(new Set(destinations.map(destination => destination.state)).size >= 12);
+test('India destination registry covers all states and union territories with unique bounded destinations', () => {
+  const statesAndTerritories = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana',
+    'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
+    'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu',
+    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+  ];
+  assert.equal(destinations.length, 88);
+  assert.equal(new Set(destinations.map(destination => destination.id)).size, destinations.length);
+  assert.deepEqual([...new Set(destinations.map(destination => destination.state))].sort(), statesAndTerritories.sort());
+  const searchNames = new Map();
   for (const destination of destinations) {
+    assert.match(destination.id, /^[a-z0-9]+(?:-[a-z0-9]+)*$/);
     assert.ok(destination.city && destination.state && destination.wikivoyageTitle);
     assert.ok(Array.isArray(destination.aliases));
+    assert.ok(destination.wikivoyageAvailable === undefined || destination.wikivoyageAvailable === false);
+    for (const name of [destination.city, ...destination.aliases]) {
+      assert.ok(typeof name === 'string' && name.trim());
+      const normalized = name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+      assert.equal(searchNames.has(normalized), false, `Ambiguous destination name: ${name}`);
+      searchNames.set(normalized, destination.id);
+    }
     assert.equal(destination.bbox.length, 4);
     assert.ok(destination.bbox.every(Number.isFinite));
     const [south, west, north, east] = destination.bbox;
     assert.ok(south < north && west < east && south >= 6 && north <= 36 && west >= 68 && east <= 98);
+    assert.ok(north - south <= 2 && east - west <= 2, `${destination.id} exceeds provider area limits`);
   }
   assert.equal(destinations.find(destination => destination.id === 'coorg').wikivoyageTitle, 'Kodagu');
   assert.equal(destinations.find(destination => destination.id === 'mysuru').wikivoyageTitle, 'Mysore');
@@ -70,6 +88,31 @@ test('Gokarna-style go beaches and bold temple listings are included only in sig
   assert.equal(places[0].coordinates, null);
   assert.equal(places[0].sources[0].url, 'https://en.wikivoyage.org/wiki/Gokarna#See');
   assert.equal(places[1].category, 'Beaches');
+});
+
+test('combined See and do headings include named sights while events, hospitals and hospitality remain excluded', () => {
+  for (const heading of ['See and do', 'See & do']) {
+    const places = parseWikivoyagePlaces(`==${heading}==
+{{see|name=Stone Temple|content=A historic shrine.}}
+{{do|name=Coastal Park|content=A walking destination.}}
+{{eat|name=Temple Cafe}}
+{{sleep|name=Coastal Hotel}}
+{{listing|type=drink|name=Garden Bar}}
+===Events===
+{{see|name=Annual Festival}}
+==Stay healthy==
+===Hospitals===
+{{listing|name=City Hospital}}
+{{see|name=Clinic Listing}}
+==Eat==
+{{listing|name=Seaside Restaurant}}
+==Sleep==
+{{see|name=Hotel Listing}}
+`, gokarna, metadata);
+    assert.deepEqual(places.map(place => place.name), ['Stone Temple', 'Coastal Park'], heading);
+    assert.ok(places.every(place => place.sources[0].retrievedAt === metadata.fetchedAt));
+  }
+  assert.deepEqual(parseWikivoyagePlaces('==See and do next==\n{{see|name=Unrelated Place}}', gokarna), []);
 });
 
 test('invalid or missing coordinate numbers never become zero and known distant places are omitted', () => {

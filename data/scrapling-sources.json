@@ -9,14 +9,31 @@
       "parser": "crowd_table",
       "scope": "destination",
       "placeDetails": {
-        "Gokarna Main Beach": { "accessNotes": "Access listed: Road / Walk." },
-        "Kudle Beach": { "accessNotes": "Access listed: Walk / Auto." },
-        "Om Beach": { "accessNotes": "Access listed: Road / Trek." },
-        "Paradise Beach": { "accessNotes": "Access listed: Trek / Boat." },
-        "God's Own Beach": { "accessNotes": "Access listed: Trek. Approach crosses plantations; confirm a permitted route locally." },
-        "Half Moon Beach": { "accessNotes": "Access listed: Trek / Boat." },
-        "Nirvana Beach": { "area": "Near Kumta", "accessNotes": "Access listed: Ferry / Road." },
-        "Small Hell Beach": { "accessNotes": "Access listed: Trek. Rocky approach; check the local route and conditions before descending." }
+        "Gokarna Main Beach": {
+          "accessNotes": "Access listed: Road / Walk."
+        },
+        "Kudle Beach": {
+          "accessNotes": "Access listed: Walk / Auto."
+        },
+        "Om Beach": {
+          "accessNotes": "Access listed: Road / Trek."
+        },
+        "Paradise Beach": {
+          "accessNotes": "Access listed: Trek / Boat."
+        },
+        "God's Own Beach": {
+          "accessNotes": "Access listed: Trek. Approach crosses plantations; confirm a permitted route locally."
+        },
+        "Half Moon Beach": {
+          "accessNotes": "Access listed: Trek / Boat."
+        },
+        "Nirvana Beach": {
+          "area": "Near Kumta",
+          "accessNotes": "Access listed: Ferry / Road."
+        },
+        "Small Hell Beach": {
+          "accessNotes": "Access listed: Trek. Rocky approach; check the local route and conditions before descending."
+        }
       },
       "maxPlaces": 12
     },
@@ -129,6 +146,386 @@
         "/places-centres/sahastradhara/"
       ],
       "maxPlaces": 60
+    },
+    {
+      "id": "diu-ghoghla",
+      "destinationId": "diu",
+      "url": "https://www.incredibleindia.gov.in/en/dadra-and-nagar-haveli-and-daman-and-diu/diu/ghoghla-beach",
+      "publisher": "Incredible India, Ministry of Tourism",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Ghoghla Beach"
+      ],
+      "category": "Beaches",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "diu-ghoghla",
+          "name": "Ghoghla Beach",
+          "selector": ".text p:contains(\"Fewer tourists\")",
+          "evidenceSha256": "c063c2f4173dff4bf7e5d2fc465b097897848d30f98a90f480b7fbb7408b441b",
+          "claim": "Incredible India describes Ghoghla Beach as receiving fewer tourists than busier beaches nearby.",
+          "direction": "quieter",
+          "conditional": false,
+          "context": "Comparison with busier nearby beaches; not an empty-beach guarantee. Publication date unavailable."
+        }
+      ]
+    },
+    {
+      "id": "chennai-elliots",
+      "destinationId": "chennai",
+      "url": "https://www.incredibleindia.gov.in/en/tamil-nadu/chennai",
+      "publisher": "Incredible India, Ministry of Tourism",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Elliot's Beach"
+      ],
+      "category": "Beaches",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "chennai-elliots",
+          "name": "Elliot's Beach",
+          "selector": ".inc-city-text p:contains(\"Besant Nagar Beach\")",
+          "evidenceSha256": "f6044a9d080dc3eedf6420dd359b2b90d7f95543dda0ea3816571feeba31ea25",
+          "claim": "Incredible India describes Elliot's Beach, also called Besant Nagar Beach, as less crowded than Marina Beach.",
+          "direction": "quieter",
+          "conditional": false,
+          "context": "Relative to Marina Beach only; this does not establish low absolute visitor numbers. Publication date unavailable."
+        }
+      ]
+    },
+    {
+      "id": "dapoli-kelashi",
+      "destinationId": "dapoli",
+      "url": "https://maharashtratourism.gov.in/best-tourism-village/",
+      "publisher": "Department of Tourism, Government of Maharashtra",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Kelashi Beach"
+      ],
+      "category": "Beaches",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "dapoli-kelashi",
+          "name": "Kelashi Beach",
+          "selector": ".elementor-element-58f06a76 li:contains(\"Pristine Beach\")",
+          "evidenceSha256": "e62d635728ec86d2893b85df4013e1f718a1da1d678c27644952402d0f211c73",
+          "claim": "Maharashtra Tourism describes Kelashi Beach as less crowded.",
+          "direction": "quieter",
+          "conditional": false,
+          "context": "General guide description; not a live headcount. Publication date unavailable."
+        }
+      ]
+    },
+    {
+      "id": "thiruvananthapuram-samudra",
+      "destinationId": "thiruvananthapuram",
+      "url": "https://smarttvm.tmc.lsgkerala.gov.in/default/index/tourist",
+      "publisher": "Thiruvananthapuram Municipal Corporation",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Samudra Beach"
+      ],
+      "category": "Beaches",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "thiruvananthapuram-samudra",
+          "name": "Samudra Beach",
+          "selector": ".tourist-card:has(h3:contains(\"Samudra Beach\")) p",
+          "evidenceSha256": "29e11683e21ac8167fbbbee2f7246956ca379e402c1a43eb7e8cd6490e3adb8b",
+          "claim": "The municipal visitor guide describes Samudra Beach as less crowded.",
+          "direction": "quieter",
+          "conditional": false,
+          "context": "General guide description; not a live headcount. Publication date unavailable."
+        }
+      ]
+    },
+    {
+      "id": "chandipur-beach",
+      "destinationId": "chandipur",
+      "url": "https://odishatourism.gov.in/en/places/chandipur-beach",
+      "publisher": "Odisha Tourism, Government of Odisha",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Chandipur Beach"
+      ],
+      "category": "Beaches",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "chandipur-beach",
+          "name": "Chandipur Beach",
+          "selector": "#dynamicDesc p",
+          "evidenceSha256": "bd747ab3f1de823f413bfd54f19c584f55efc5a7987306061becbe5773adbf8c",
+          "claim": "Odisha Tourism describes Chandipur Beach as less crowded.",
+          "direction": "quieter",
+          "conditional": false,
+          "context": "General guide description; not a live headcount. Publication date unavailable."
+        }
+      ]
+    },
+    {
+      "id": "puri-niladri",
+      "destinationId": "puri",
+      "url": "https://odishatourism.gov.in/en/places/niladri-beach",
+      "publisher": "Odisha Tourism, Government of Odisha",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Niladri Beach"
+      ],
+      "category": "Beaches",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "puri-niladri",
+          "name": "Niladri Beach",
+          "selector": "#dynamicDesc p",
+          "evidenceSha256": "0f7ba7f902150de19223fb4cb109d550908c722692358958c06c75c79e4660ef",
+          "claim": "Odisha Tourism describes Niladri Beach as less crowded.",
+          "direction": "quieter",
+          "conditional": false,
+          "context": "General guide description; not a live headcount. Publication date unavailable."
+        }
+      ]
+    },
+    {
+      "id": "barmer-mahabar",
+      "destinationId": "barmer",
+      "url": "https://www.tourism.rajasthan.gov.in/barmer.html",
+      "publisher": "Rajasthan Tourism, Government of Rajasthan",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Mahabar Sand Dunes"
+      ],
+      "category": "Nature",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "barmer-mahabar",
+          "name": "Mahabar Sand Dunes",
+          "selector": "#mahabar-sand-dunes---barmer .articleCont p",
+          "evidenceSha256": "2e58ae8befc0cd5656e082894745e94e6ce9c2ccb8a598d5e673c107b4b6d599",
+          "claim": "Rajasthan Tourism describes Mahabar Sand Dunes as less crowded than other nearby destinations.",
+          "direction": "quieter",
+          "conditional": false,
+          "context": "Comparison with other tourist spots; not a live headcount. Publication date unavailable."
+        }
+      ]
+    },
+    {
+      "id": "kadmat-island",
+      "destinationId": "kadmat",
+      "url": "https://www.incredibleindia.gov.in/en/lakshadweep/kavaratti/lakshadweep-travel-guide",
+      "publisher": "Incredible India, Ministry of Tourism",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Kadmat Island"
+      ],
+      "category": "Nature",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "kadmat-island",
+          "name": "Kadmat Island",
+          "selector": ".text p:contains(\"Kadmat Island\")",
+          "evidenceSha256": "890f143ae1c6c48b14ad8973ac1f047110032609195b5128842e1384a1f7cdc4",
+          "claim": "Incredible India describes Kadmat Island as less crowded than other islands in the group.",
+          "direction": "quieter",
+          "conditional": false,
+          "context": "Comparison with other islands; not a live headcount. Check current island access arrangements."
+        }
+      ]
+    },
+    {
+      "id": "goa-querim",
+      "destinationId": "goa",
+      "url": "https://www.incredibleindia.gov.in/en/goa/goa/exploring-the-beauty-of-the-pristine-coastline",
+      "publisher": "Incredible India, Ministry of Tourism",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Querim Beach"
+      ],
+      "category": "Beaches",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "goa-querim",
+          "name": "Querim Beach",
+          "selector": ".text p:contains(\"Querim Beach\")",
+          "evidenceSha256": "414398a7bb3af8cda1d9d3aa67e28c498d855bc63a0348a7e99261763c4243b6",
+          "claim": "Incredible India describes Querim Beach as receiving few tourists.",
+          "direction": "quieter",
+          "conditional": false,
+          "context": "General guide description; not a live headcount. Publication date unavailable."
+        }
+      ]
+    },
+    {
+      "id": "fazilka-sadqi",
+      "destinationId": "fazilka",
+      "url": "https://www.incredibleindia.gov.in/en/punjab/fazilka/sadqi-border-retreat-ceremony",
+      "publisher": "Incredible India, Ministry of Tourism",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Sadqi Border Retreat Ceremony"
+      ],
+      "category": "Culture",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "fazilka-sadqi",
+          "name": "Sadqi Border Retreat Ceremony",
+          "selector": ".inc-tilemap__right p:contains(\"Sadqi Border Retreat Ceremony\")",
+          "evidenceSha256": "db7e77d3504b82762e011327a24f5805ebfab379cbb015203ba73d8863171912",
+          "claim": "Incredible India describes the Sadqi border ceremony as less crowded than Wagah.",
+          "direction": "quieter",
+          "conditional": true,
+          "context": "Sunset ceremony near the international border; verify current visitor access and event timing. Not a live headcount."
+        }
+      ]
+    },
+    {
+      "id": "dharamshala-kareri",
+      "destinationId": "dharamshala",
+      "url": "https://www.incredibleindia.gov.in/en/himachal-pradesh/dharamshala/kareri-lake",
+      "publisher": "Incredible India, Ministry of Tourism",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Kareri Lake"
+      ],
+      "category": "Trails",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "dharamshala-kareri",
+          "name": "Kareri Lake",
+          "selector": ".text p:contains(\"Unlike the bustling summer months\")",
+          "evidenceSha256": "93aa2d35c847cea63f974bfd172f9263fb0a0487bdd5ecc5cf9e7f93cd89c2b2",
+          "claim": "Incredible India describes the Kareri Lake trails as less crowded in winter than in summer.",
+          "direction": "quieter",
+          "conditional": true,
+          "context": "Winter trails compared with summer; seasonal conditions and access must be checked. Not a live headcount."
+        }
+      ]
+    },
+    {
+      "id": "ranchi-dassam",
+      "destinationId": "ranchi",
+      "url": "https://www.incredibleindia.gov.in/en/jharkhand/ranchi/dassam-falls",
+      "publisher": "Incredible India, Ministry of Tourism",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Dassam Falls"
+      ],
+      "category": "Nature",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "ranchi-dassam",
+          "name": "Dassam Falls",
+          "selector": ".text p:contains(\"The best time to visit Dassam Falls\")",
+          "evidenceSha256": "86f9f9b80bd233f0239822b6c71ea247a446e71279abf4f198f3c414399db3f6",
+          "claim": "Incredible India suggests October-November for a less crowded visit to Dassam Falls.",
+          "direction": "quieter",
+          "conditional": true,
+          "context": "October-November recommendation only; other periods can differ. Not a live headcount or water-safety advice."
+        }
+      ]
+    },
+    {
+      "id": "coorg-brahmagiri",
+      "destinationId": "coorg",
+      "url": "https://karnatakatourism.org/en/experiences/brahmagiri-trek-experience/",
+      "publisher": "Karnataka Tourism, Government of Karnataka",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Brahmagiri trekking trail"
+      ],
+      "category": "Trails",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "coorg-brahmagiri",
+          "name": "Brahmagiri trekking trail",
+          "selector": ".rich-text-content li:contains(\"Secluded and less crowded\")",
+          "evidenceSha256": "55c367e59606b1fcd3dba6ea0757b7e050571093497cfe2ea94e6aec37444457",
+          "claim": "Karnataka Tourism describes the Brahmagiri trek in Coorg as less crowded.",
+          "direction": "quieter",
+          "conditional": false,
+          "context": "General trek description; Forest Department permits and current trail access must be confirmed. Not a live headcount."
+        }
+      ],
+      "placeDetails": {
+        "Brahmagiri trekking trail": {
+          "accessNotes": "Forest Department permits are required; confirm current trail access and conditions before travel."
+        }
+      }
+    },
+    {
+      "id": "mumbai-versova",
+      "destinationId": "mumbai",
+      "url": "https://www.incredibleindia.gov.in/en/maharashtra/mumbai/a-serene-escape",
+      "publisher": "Incredible India, Ministry of Tourism",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Versova Beach"
+      ],
+      "category": "Beaches",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "mumbai-versova",
+          "name": "Versova Beach",
+          "selector": ".text p:contains(\"Versova Beach offers\")",
+          "evidenceSha256": "fa6dff3ffedb47645a0bdfcfd097d48a561b5e049fb8661333a9e18fd64f5812",
+          "claim": "Incredible India describes Versova Beach as a less crowded alternative to Juhu Beach.",
+          "direction": "quieter",
+          "conditional": false,
+          "context": "Relative to Juhu only; the guide also describes daily fish markets and festival celebrations. Not an empty-beach guarantee."
+        }
+      ]
+    },
+    {
+      "id": "bengaluru-lalbagh",
+      "destinationId": "bengaluru",
+      "url": "https://karnatakatourism.org/en/attractions/lalbagh-botanical-garden/",
+      "publisher": "Karnataka Tourism, Government of Karnataka",
+      "parser": "crowd_claim",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Lalbagh Botanical Garden"
+      ],
+      "category": "Nature",
+      "maxPlaces": 1,
+      "claims": [
+        {
+          "id": "bengaluru-lalbagh",
+          "name": "Lalbagh Botanical Garden",
+          "selector": ".rich-text-content p:contains(\"Between 6:00 AM and 9:00 AM\")",
+          "evidenceSha256": "46603041c91f546eb2bf88962b101a3192f40e7d524f929d3b5ff9e820eeab35",
+          "claim": "Karnataka Tourism describes Lalbagh as less crowded between 6 and 9 in the morning.",
+          "direction": "quieter",
+          "conditional": true,
+          "context": "Only the 6-9 AM window; evenings and flower shows draw larger crowds. Not generally quiet or a live headcount."
+        }
+      ]
     }
   ]
 }

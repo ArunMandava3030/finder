@@ -54,11 +54,11 @@ test('keeps a newer repository snapshot and falls back byte-for-byte on provider
 
 test('a later run from an older commit cannot remove a newer crowd-evidence methodology', async () => {
   await withTarget(async target => {
-    const current = { ...fixture(), methodology: { version: 2 } };
+    const current = { ...fixture(), methodology: { version: 3 } };
     current.places[0].crowd = { status: 'quieter', evidence: [] };
     const saved = JSON.stringify(current);
     await writeFile(target, saved);
-    const laterOldRun = { ...fixture('2026-01-03T00:00:00Z'), methodology: { version: 1 } };
+    const laterOldRun = { ...fixture('2026-01-03T00:00:00Z'), methodology: { version: 2 } };
     const result = await loadLastIndex({ target, log: () => {}, fetchImpl: async () => response(laterOldRun) });
     assert.deepEqual(result, { status: 'kept', reason: 'older_methodology' });
     assert.equal(await readFile(target, 'utf8'), saved);
@@ -77,6 +77,7 @@ test('rejects malformed snapshots, unsafe URLs, future dates, and copied social 
     (index) => { index.places[0].sources[0].url = 'javascript:alert(1)'; },
     (index) => { index.places[0].sources[0].url = 'https://user:secret@example.org'; },
     (index) => { index.places[0].sources[0].retrievedAt = 'tomorrow'; },
+    (index) => { index.destinations[0].collectionAttemptedAt = '2999-01-01T00:00:00Z'; },
     (index) => { index.places[0].coordinates.lat = 100; },
     (index) => { index.places[0].destinationId = 'unknown'; },
     (index) => { index.places.push(index.places[0]); },

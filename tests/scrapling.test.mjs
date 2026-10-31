@@ -248,10 +248,12 @@ test('offline --scraped integration publishes merged coverage and leaves the old
     const target = path.join(directory, 'index.json');
     const batchFile = path.join(directory, 'batch.json');
     const registryFile = path.join(directory, 'registry.json');
+    const refreshPlan = path.join(directory, 'refresh-plan.json');
     await writeFile(target, JSON.stringify({ schemaVersion: 1, generatedAt: OLD, destinations: [{ ...destination, fetchedAt: OLD, count: 1, providers: [{ provider: 'wikivoyage', status: 'ok', fetchedAt: OLD }] }], places: [wikiPlace()], discussions: [] }));
     await writeFile(batchFile, JSON.stringify(batch()));
     await writeFile(registryFile, JSON.stringify(registry));
-    const args = ['scripts/refresh-india.mjs', '--destinations', 'none', '--output', target, '--scraped', batchFile, '--scraping-registry', registryFile];
+    await writeFile(refreshPlan, JSON.stringify({ schemaVersion: 1, destinationIds: [], sourceIds: [] }));
+    const args = ['scripts/refresh-india.mjs', '--batch', refreshPlan, '--output', target, '--scraped', batchFile, '--scraping-registry', registryFile];
     await exec(process.execPath, args, { timeout: 10_000 });
     const output = JSON.parse(await readFile(target, 'utf8'));
     assert.equal(output.places.length, 1);
@@ -260,6 +262,7 @@ test('offline --scraped integration publishes merged coverage and leaves the old
     assert.equal(output.destinations.find(item => item.id === 'gokarna').providers.find(item => item.provider === 'scrapling').count, 1);
     assert.equal(output.scraping.sources[0].status, 'ok');
     assert.equal(output.stats.scrapedPlaces, 1);
+    assert.equal(output.methodology.version, 3);
     assert.ok(output.attribution.some(item => item.name === 'Regional Tourism' && item.license === 'Factual metadata; see source terms'));
     await writeFile(batchFile, JSON.stringify(batch([batchSource('tourism-gokarna', { status: 'blocked', fetchedAt: null, attemptedAt: CURRENT, places: [] })])));
     await exec(process.execPath, args, { timeout: 10_000 });
@@ -291,6 +294,30 @@ function crowdPlace(level = 'very_low', overrides = {}) {
 }
 
 const normalizedCrowdBatch = (places, sourceOverrides = {}, options = {}) => normalizeScraplingBatch(batch([batchSource('tourism-gokarna', { places, ...sourceOverrides })]), { registry: crowdRegistry, destinations: [destination], now: () => Date.parse(CURRENT), ...options });
+
+test('reviewed prose ingestion reconstructs approved paraphrases without inventing absolute crowd levels', () => {
+  const claim = { id: 'quiet-cove', name: 'Quiet Cove', selector: '#quiet-cove p', evidenceSha256: 'a'.repeat(64), claim: 'The tourism office describes Quiet Cove as less crowded.', direction: 'quieter', conditional: false, context: 'General guide description; not a live headcount. Publication date unavailable.' };
+  const reviewedRegistry = { schemaVersion: 1, sources: [{ ...crowdRegistry.sources[0], parser: 'crowd_claim', claims: [claim] }] };
+  const place = crowdPlace('low', { claimId: claim.id, level: undefined, publishedPeriod: null });
+  const normalized = normalizedCrowdBatch([place], {}, { registry: reviewedRegistry });
+  assert.equal(normalized.sources[0].status, 'ok');
+  const evidence = normalized.sources[0].places[0].crowdEvidence[0];
+  assert.equal(evidence.claim, claim.claim);
+  assert.equal(evidence.publishedPeriod, null);
+  assert.equal(evidence.level, undefined);
+  assert.doesNotMatch(JSON.stringify(normalized), /UNTRUSTED|evidenceSha256/);
+  assert.equal(mergeScraplingBatch([], normalized).places[0].crowd.status, 'quieter');
+  for (const mutation of [candidate => { candidate.name = 'Another Cove'; }, candidate => { candidate.crowdEvidence[0].claimId = 'unregistered'; }, candidate => { candidate.crowdEvidence[0].level = 'very_low'; }, candidate => { candidate.crowdEvidence[0].conditional = true; }, candidate => { candidate.crowdEvidence[0].publishedPeriod = '2026-06'; }]) {
+    const changed = structuredClone(place);
+    mutation(changed);
+    assert.equal(normalizedCrowdBatch([changed], {}, { registry: reviewedRegistry }).sources[0].status, 'unavailable');
+  }
+  const conditional = structuredClone(reviewedRegistry);
+  conditional.sources[0].claims[0].conditional = true;
+  conditional.sources[0].claims[0].claim = 'Quiet Cove is less crowded on weekdays.';
+  place.crowdEvidence[0].conditional = true;
+  assert.equal(mergeScraplingBatch([], normalizedCrowdBatch([place], {}, { registry: conditional })).places[0].crowd.status, 'mixed');
+});
 
 test('crowd-table ingestion reconstructs supported claims, preserves month precision and uses only registry access details', () => {
   const result = normalizedCrowdBatch([crowdPlace()]);

@@ -25,10 +25,11 @@ from scrapling.parser import Selector
 USER_AGENT = 'ElsewhereBot/1.0 (+https://github.com/ArunMandava3030/finder)'
 MAX_HTML_BYTES = 2 * 1024 * 1024
 MAX_ROBOTS_BYTES = 256 * 1024
-MAX_SOURCES = 30
+MAX_SOURCES = 200
 MAX_PLACES = 60
 TIMEOUT_SECONDS = 12
 PRIVATE_ACCESS = re.compile(r'\b(?:private property|no public access|closed permanently|permanently closed|not open to (?:the )?public)\b', re.I)
+CROWD_SIGNAL = re.compile(r'\b(?:uncrowded|unfrequented|(?:less|least|lightly|sparsely|rarely|seldom)[ -](?:crowded|visited|frequented)|(?:few|fewer|hardly any|not many)\s+(?:people|visitors|tourists|travellers|travelers)|(?:little|low|minimal|limited)\s+(?:crowding|crowds?|footfall|visitor numbers)|(?:without|away from|far from)\s+(?:the\s+)?crowds?|not\s+(?:very\s+)?crowded|crowd[ -]free|crowded|overcrowded)\b', re.I)
 
 
 def timestamp() -> str:
@@ -173,6 +174,10 @@ def selected_text(node, selector: str | None) -> str:
 
 def normalized_name(value: str) -> str:
     return re.sub(r'[^\w]+', ' ', value.casefold()).strip()
+
+
+def normalized_evidence(value: str) -> str:
+    return re.sub(r'\s+', ' ', value.replace('\u2019', "'").replace('\u2018', "'").replace('\u00a0', ' ')).strip().casefold()
 
 
 def category_for(name: str) -> str:
@@ -320,6 +325,8 @@ def extract_places(body: bytes, source: dict, destination: dict, fetched_at: str
     page = Selector(body, url=source['url'], encoding='utf-8', huge_tree=False, adaptive=False)
     if source['parser'] == 'crowd_table':
         return extract_crowd_table(page, source, destination, fetched_at)
+    if source['parser'] == 'crowd_claim':
+        return extract_crowd_claims(page, source, destination, fetched_at)
     nodes = page.css(source.get('itemSelector') or ('h1' if source['parser'] == 'detail' else 'main h2 a'))
     if len(nodes) > 300:
         raise ValueError('Too many candidate elements; review the source selectors.')
@@ -378,6 +385,50 @@ def extract_places(body: bytes, source: dict, destination: dict, fetched_at: str
     return places
 
 
+def extract_crowd_claims(page, source: dict, destination: dict, fetched_at: str) -> list[dict]:
+    """Recheck complete reviewed passages; publish only bounded factual paraphrases.
+
+    Exact paragraph matching deliberately stops on editorial changes, including
+    added caveats. A scenic/peaceful/hidden label alone is never crowd evidence.
+    """
+    places = []
+    details = {normalized_name(name): fields for name, fields in source.get('placeDetails', {}).items()}
+    for claim in source['claims']:
+        nodes = page.css(claim['selector'])
+        if len(nodes) > 100:
+            raise ValueError('The reviewed crowd selector is no longer narrow enough.')
+        matches = [node_text(node) for node in nodes if hashlib.sha256(normalized_evidence(node_text(node)).encode()).hexdigest() == claim['evidenceSha256']]
+        if len(matches) != 1 or PRIVATE_ACCESS.search(matches[0]) or not CROWD_SIGNAL.search(matches[0]):
+            continue
+        name, url = claim['name'], source['url']
+        evidence = {
+            'url': url, 'publisher': source['publisher'], 'claim': claim['claim'],
+            'claimId': claim['id'], 'direction': claim['direction'],
+            'sourceUpdatedAt': None, 'publishedPeriod': None, 'retrievedAt': fetched_at,
+            'conditional': claim['conditional'], 'context': claim['context'],
+            'sourceType': 'official', 'provider': 'scrapling', 'sourceId': source['id'],
+        }
+        place = {
+            'id': f"scrapling:{source['id']}:{hashlib.sha256((url + '|' + normalized_name(name)).encode()).hexdigest()[:16]}",
+            'name': name, 'city': destination['city'], 'state': destination['state'],
+            'destinationId': destination['id'], 'country': 'India',
+            'category': source.get('category') or category_for(name),
+            'coordinates': None, 'image': None, 'tags': ['official tourism'],
+            'description': f"Listed by {source['publisher']}. Open the original source for place details and current visitor information.",
+            'crowdEvidence': [evidence],
+            'sources': [{
+                'url': url, 'title': name, 'kind': 'guide', 'publisher': source['publisher'],
+                'provider': 'scrapling', 'sourceId': source['id'], 'catalogUrl': url,
+                'collectionMethod': 'scrapling', 'retrievedAt': fetched_at,
+                'publishedAt': None, 'updatedAt': None, 'excerpt': '',
+                'license': 'Factual metadata; see source terms',
+            }],
+        }
+        place.update(details.get(normalized_name(name), {}))
+        places.append(place)
+    return places
+
+
 def validate_sources(manifest: dict, destinations: list) -> list[dict]:
     sources = manifest.get('sources') if isinstance(manifest, dict) else None
     if not isinstance(manifest, dict) or manifest.get('schemaVersion') != 1 or not isinstance(sources, list) or not 1 <= len(sources) <= MAX_SOURCES:
@@ -387,7 +438,7 @@ def validate_sources(manifest: dict, destinations: list) -> list[dict]:
         if not isinstance(source, dict) or not re.fullmatch(r'[a-z0-9-]{1,80}', source.get('id', '')) or source['id'] in ids:
             raise ValueError('Sources need unique, bounded identifiers.')
         ids.add(source['id'])
-        if source.get('destinationId') not in destination_ids or source.get('parser') not in {'listing', 'detail', 'crowd_table'} or not public_url(source.get('url')):
+        if source.get('destinationId') not in destination_ids or source.get('parser') not in {'listing', 'detail', 'crowd_table', 'crowd_claim'} or not public_url(source.get('url')):
             raise ValueError('Invalid source destination, URL or parser.')
         if not isinstance(source.get('publisher'), str) or not 2 <= len(source['publisher']) <= 160:
             raise ValueError('Sources need an attributed publisher.')
@@ -401,6 +452,23 @@ def validate_sources(manifest: dict, destinations: list) -> list[dict]:
         for field in ('itemSelector', 'nameSelector', 'linkSelector', 'linkPattern'):
             if field in source and (not isinstance(source[field], str) or len(source[field]) > 500):
                 raise ValueError('Invalid extraction selector.')
+        if source['parser'] == 'crowd_claim':
+            claims = source.get('claims')
+            if not isinstance(claims, list) or not 1 <= len(claims) <= min(20, source.get('maxPlaces', MAX_PLACES)):
+                raise ValueError('A crowd source needs bounded reviewed claims.')
+            claim_ids, claim_names = set(), set()
+            for claim in claims:
+                if not isinstance(claim, dict) or not re.fullmatch(r'[a-z0-9-]{1,80}', claim.get('id', '')) or claim['id'] in claim_ids:
+                    raise ValueError('Invalid reviewed claim identifier.')
+                for field, maximum in [('name', 160), ('selector', 500), ('claim', 360), ('context', 300)]:
+                    if not isinstance(claim.get(field), str) or not 3 <= len(claim[field].strip()) <= maximum:
+                        raise ValueError('Invalid reviewed crowd claim.')
+                if normalized_name(claim['name']) in claim_names or claim.get('direction') not in {'quieter', 'busy'} or not isinstance(claim.get('conditional'), bool):
+                    raise ValueError('Ambiguous reviewed crowd claim.')
+                if not re.fullmatch(r'[a-f0-9]{64}', claim.get('evidenceSha256', '')) or not CROWD_SIGNAL.search(claim['claim']):
+                    raise ValueError('A crowd claim needs an explicit visitor or crowd statement.')
+                claim_ids.add(claim['id'])
+                claim_names.add(normalized_name(claim['name']))
         details = source.get('placeDetails', {})
         if not isinstance(details, dict) or len(details) > MAX_PLACES:
             raise ValueError('Invalid place details mapping.')
@@ -412,16 +480,22 @@ def validate_sources(manifest: dict, destinations: list) -> list[dict]:
     return sources
 
 
-def collect(manifest: dict, destinations: list, *, fetch=fetch_document, pause=time.sleep, only: set | None = None) -> dict:
+def collect(manifest: dict, destinations: list, *, fetch=fetch_document, pause=time.sleep, only: set | None = None, deadline_seconds: float | None = None) -> dict:
     sources = validate_sources(manifest, destinations)
-    if only and not only.issubset({source['id'] for source in sources}):
+    if only is not None and not only.issubset({source['id'] for source in sources}):
         raise ValueError('Unknown source in --only.')
     destinations_by_id = {destination['id']: destination for destination in destinations}
     robots_cache, next_request = {}, {}
     results = []
+    deadline = time.monotonic() + deadline_seconds if deadline_seconds is not None else None
     for source in sources:
-        if only and source['id'] not in only:
+        if only is not None and source['id'] not in only:
             continue
+        if source.get('enabled') is False:
+            continue
+        if deadline is not None and time.monotonic() >= deadline:
+            print('Collection time budget reached; unattempted sources retain earlier data.', file=sys.stderr)
+            break
         result = {key: source[key] for key in ('id', 'destinationId', 'url', 'publisher')}
         result.update({'status': 'unavailable', 'fetchedAt': None, 'attemptedAt': timestamp(), 'places': [], 'warnings': []})
         host = origin(source['url'])
@@ -473,13 +547,29 @@ def main() -> int:
     parser.add_argument('--destinations', type=Path, default=Path('data/india-destinations.json'))
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--only', help='Comma-separated registered source IDs; no arbitrary URLs.')
+    parser.add_argument('--batch', type=Path, help='Refresh plan containing registered sourceIds.')
+    parser.add_argument('--budget-seconds', type=int, default=200, help='Stop between sources and write a partial batch before the workflow deadline.')
     args = parser.parse_args()
     try:
         if args.sources.stat().st_size > 256 * 1024 or args.destinations.stat().st_size > 256 * 1024:
             raise ValueError('Configuration is too large.')
         manifest = json.loads(args.sources.read_text(encoding='utf-8-sig'))
         destinations = json.loads(args.destinations.read_text(encoding='utf-8-sig'))
-        output = collect(manifest, destinations, only=set(args.only.split(',')) if args.only else None)
+        only = set(args.only.split(',')) if args.only else None
+        if args.batch:
+            if args.only or args.batch.stat().st_size > 256 * 1024:
+                raise ValueError('Invalid refresh plan.')
+            batch = json.loads(args.batch.read_text(encoding='utf-8-sig'))
+            ids = batch.get('sourceIds')
+            if batch.get('schemaVersion') != 1 or not isinstance(ids, list) or len(ids) > 30 or any(not isinstance(value, str) for value in ids) or len(set(ids)) != len(ids):
+                raise ValueError('Invalid refresh plan source IDs.')
+            only = set(ids)
+            # Honor oldest-attempt ordering even when the time budget stops early.
+            order = {source_id: index for index, source_id in enumerate(ids)}
+            manifest['sources'].sort(key=lambda source: order.get(source['id'], len(ids)))
+        if not 1 <= args.budget_seconds <= 1800:
+            raise ValueError('Invalid collection time budget.')
+        output = collect(manifest, destinations, only=only, deadline_seconds=args.budget_seconds)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         temporary = args.output.with_suffix(args.output.suffix + '.tmp')
         temporary.write_text(json.dumps(output, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')

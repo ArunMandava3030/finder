@@ -1,300 +1,179 @@
 import { test, expect } from '@playwright/test';
 
-const apiRequests = new WeakMap();
+const date = '2026-10-31T00:00:00.000Z';
+const destinations = [
+  { id: 'gokarna', city: 'Gokarna', state: 'Karnataka' },
+  { id: 'goa', city: 'Goa', state: 'Goa' },
+  { id: 'varkala', city: 'Varkala', state: 'Kerala' },
+  { id: 'jaipur', city: 'Jaipur', state: 'Rajasthan' },
+].map(item => ({ ...item, aliases: [], count: 1, status: 'ok', fetchedAt: date }));
+
+function place(id, name, destinationId, status = 'quieter') {
+  const destination = destinations.find(item => item.id === destinationId);
+  const source = { kind: 'guide', provider: 'wikivoyage', url: `https://en.wikivoyage.org/wiki/${destination.city}#${id}`, title: name, publisher: 'Wikivoyage', license: 'CC BY-SA 4.0', retrievedAt: date, updatedAt: date, excerpt: status === 'quieter' ? `${name} receives few visitors.` : status === 'busy' ? `${name} is crowded.` : 'A named place from a public travel guide.' };
+  return { id, name, destinationId, city: destination.city, state: destination.state, category: 'Nature', description: 'A named place from a public travel guide.', sources: [source], crowd: { status, confidence: 'low', level: status === 'quieter' ? 'low' : null, evidence: status === 'quieter' ? [{ ...source, claim: `${name} has fewer visitors according to its source.`, sourceUpdatedAt: date }] : [] } };
+}
+
+const fixture = { schemaVersion: 1, generatedAt: date, destinations, discussions: [], places: [
+  place('cove', 'Coastal Cove', 'gokarna'), place('cliff', 'Little Cliff', 'gokarna'),
+  place('goa-cove', 'Goa Cove', 'goa'), place('kerala-cove', 'Kerala Cove', 'varkala'),
+  place('garden', 'Jaipur Garden', 'jaipur', 'unknown'),
+  place('busy', 'Busy Main Beach', 'gokarna', 'busy'),
+  place('unknown', 'Gokarna Temple', 'gokarna', 'unknown'),
+] };
+
+function wikiPage(title, content) {
+  return { title, fullurl: `https://en.wikivoyage.org/wiki/${encodeURIComponent(title)}`, revisions: [{ timestamp: date, slots: { main: { content } } }] };
+}
+
+async function mockGuides(page, handler = () => []) {
+  await page.route('https://en.wikivoyage.org/w/api.php?**', async route => {
+    const params = new URL(route.request().url()).searchParams;
+    const pages = await handler(params);
+    await route.fulfill({ json: { batchcomplete: true, query: { pages } }, headers: { 'access-control-allow-origin': '*' } });
+  });
+}
 
 test.beforeEach(async ({ page }) => {
-  const requests = [];
-  apiRequests.set(page, requests);
-  page.on('request', request => {
-    const url = new URL(request.url());
-    if (url.origin === 'http://127.0.0.1:4173' && /\/(?:api)(?:\/|$)/.test(url.pathname)) {
-      requests.push(url.pathname);
-    }
-  });
+  await page.route('**/data/india-index.json', route => route.fulfill({ json: fixture }));
+  await mockGuides(page);
+  const apiRequests = [];
+  page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/finder/api/')) apiRequests.push(request.url()); });
+  page.on('close', () => expect(apiRequests, 'Pages works without an application API').toEqual([]));
 });
 
-test.afterEach(async ({ page }) => {
-  expect(apiRequests.get(page), 'GitHub Pages must work without an application API').toEqual([]);
-});
-
-async function mockWikimedia(page, { empty = false } = {}) {
-  const requests = [];
-  await page.route(/^https:\/\/en\.(?:wikipedia|wikivoyage)\.org\/w\/api\.php(?:\?|$)/, async route => {
-    const url = new URL(route.request().url());
-    requests.push(url);
-    const voyage = url.hostname === 'en.wikivoyage.org';
-    const fullGuide = voyage && !url.searchParams.has('generator');
-    const extract = fullGuide
-      ? 'Gokarna is a coastal town in Karnataka.\n\n== See ==\nHalf Moon Beach is a small coastal cove reached along the walking route.\n\n== Do ==\nExplore the coastal paths in daylight and carry drinking water.\n\n== Eat ==\nThe town has local restaurants.'
-      : voyage
-        ? 'A community-edited travel guide to Gokarna, its beaches, and coastal walks.'
-        : 'Gokarna is a town on the coast of Karnataka in India.';
-    await route.fulfill({
-      contentType: 'application/json',
-      headers: { 'access-control-allow-origin': '*' },
-      json: {
-        batchcomplete: true,
-        query: {
-          pages: empty ? [] : [{
-            pageid: voyage ? 100 : 200,
-            title: 'Gokarna',
-            index: 1,
-            extract,
-            fullurl: `https://en.${voyage ? 'wikivoyage' : 'wikipedia'}.org/wiki/Gokarna`,
-          }],
-        },
-      },
-    });
-  });
-  return requests;
+async function search(page, query) {
+  await page.getByRole('combobox', { name: 'Search places in India' }).fill(query);
+  await page.getByRole('button', { name: 'Find places', exact: true }).click();
 }
 
-async function openGeneralGuides(page) {
-  const guides = page.locator('.general-guides');
-  if ((await guides.getAttribute('open')) === null) await guides.locator(':scope > summary').click();
-}
-
-async function searchFor(page, query, { general = true } = {}) {
-  await page.getByRole('searchbox').fill(query);
-  await page.getByRole('searchbox').press('Enter');
-  if (general) await openGeneralGuides(page);
-}
-
-test('the static project subpath loads its scripts, styles, and photographs', async ({ page }) => {
-  await mockWikimedia(page);
-  const failedAssets = [];
-  page.on('response', response => {
-    const url = new URL(response.url());
-    if (url.origin === 'http://127.0.0.1:4173' && response.status() >= 400) {
-      failedAssets.push(`${response.status()} ${url.pathname}`);
-    }
-  });
-  await page.goto('./', { waitUntil: 'networkidle' });
-  await expect(page.getByRole('heading', { name: 'Find places with fewer crowds.', exact: true })).toBeVisible();
-  await expect(page.locator('.place-card').first()).not.toBeVisible();
-  await openGeneralGuides(page);
-  await expect(page.locator('.place-card')).toHaveCount(6);
-  await page.locator('img[loading="lazy"]').evaluateAll(images => {
-    images.forEach(image => { image.loading = 'eager'; });
-  });
-  await expect.poll(() => page.locator('img').evaluateAll(images =>
-    images.length > 0 && images.every(image => image.complete && image.naturalWidth > 0),
-  )).toBe(true);
-  const assetPaths = await page.locator('script[src], link[rel="stylesheet"], img[src]').evaluateAll(elements =>
-    elements.map(element => new URL(element.src || element.href, document.baseURI))
-      .filter(url => url.origin === window.location.origin)
-      .map(url => url.pathname),
-  );
-  expect(assetPaths.some(path => path.startsWith('/finder/assets/'))).toBe(true);
-  expect(assetPaths.some(path => path.startsWith('/finder/images/'))).toBe(true);
+test('home is a simple nationwide search with diverse quieter places and no filter panels', async ({ page }) => {
+  const failures = [];
+  page.on('response', response => { if (response.url().includes('127.0.0.1:4173') && response.status() >= 400) failures.push(response.url()); });
+  await page.goto('./');
+  await expect(page.getByRole('heading', { name: 'Find a quieter corner of India.' })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Search places in India' })).toHaveCount(1);
+  await expect(page.locator('select')).toHaveCount(0);
+  await expect(page.locator('.discovery-card')).toHaveCount(4);
+  expect(await page.locator('.discovery-card h3').allTextContents()).toEqual(['Coastal Cove', 'Goa Cove', 'Kerala Cove', 'Little Cliff']);
+  await expect(page.getByRole('heading', { name: 'Busy Main Beach' })).toHaveCount(0);
+  await expect(page.locator('.general-guides')).toHaveCount(0);
+  expect(failures).toEqual([]);
+  const assetPaths = await page.locator('script[src], link[rel=stylesheet]').evaluateAll(items => items.map(item => new URL(item.src || item.href, document.baseURI)).filter(url => url.origin === location.origin).map(url => url.pathname));
   expect(assetPaths.every(path => path.startsWith('/finder/'))).toBe(true);
-  expect(failedAssets).toEqual([]);
-  await expect(page.getByRole('button', { name: 'Connect search', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('dialog', { name: 'Connect live search' })).toHaveCount(0);
 });
 
-test('a compact hashtag retrieves public travel guides without credentials', async ({ page }) => {
-  const requests = await mockWikimedia(page);
-  await page.goto('./', { waitUntil: 'domcontentloaded' });
-  await searchFor(page, '#hiddenplacegokarna');
-  await expect(page.locator('.web-result a[href="https://en.wikivoyage.org/wiki/Gokarna"]').first()).toBeVisible();
-  await expect(page.locator('.web-result a[href="https://en.wikipedia.org/wiki/Gokarna"]').first()).toBeVisible();
-  expect(requests.some(url => url.hostname === 'en.wikipedia.org')).toBe(true);
-  expect(requests.some(url => url.hostname === 'en.wikivoyage.org')).toBe(true);
-  for (const url of requests.filter(url => url.searchParams.has('generator'))) {
-    expect(url.searchParams.get('origin')).toBe('*');
-    expect(url.searchParams.get('gsrsearch')).toMatch(/gokarna/i);
-    expect(url.searchParams.get('gsrsearch')).not.toContain('#hiddenplace');
+test('hashtag and natural-language city searches preserve the fewer-crowds requirement', async ({ page }) => {
+  await page.goto('./');
+  for (const query of ['#hiddenplacegokarna', 'less populated places in Gokarna']) {
+    await search(page, query);
+    await expect(page.locator('.quieter-results .discovery-card')).toHaveCount(2);
+    await expect(page.getByRole('heading', { name: 'Goa Cove', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Busy Main Beach' })).toHaveCount(0);
   }
+  await page.getByRole('button', { name: /See other places/ }).click();
+  await expect(page.getByRole('heading', { name: 'Gokarna Temple' })).toBeVisible();
+  await expect(page.getByText('Crowds unverified', { exact: true })).toBeVisible();
+});
+
+test('state, city alias, and place-name queries work beyond Gokarna', async ({ page }) => {
+  await page.goto('./');
+  await search(page, 'Kerala');
+  await expect(page.locator('.quieter-results .discovery-card')).toHaveCount(1);
+  await expect(page.getByRole('heading', { name: 'Kerala Cove', exact: true })).toBeVisible();
+  await search(page, 'Panaji');
+  await expect(page.getByRole('heading', { name: 'Goa Cove', exact: true })).toBeVisible();
+  await search(page, 'Coastal Cove');
+  await expect(page.locator('.quieter-results .discovery-card')).toHaveCount(1);
+  await expect(page.getByRole('heading', { name: 'Coastal Cove', exact: true })).toBeVisible();
+});
+
+test('cities without quiet evidence still show available places with honest labels', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: 'Jaipur', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Jaipur Garden' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No confirmed quieter spots here yet.' })).toBeVisible();
+  await expect(page.locator('.other-results .discovery-card')).toHaveCount(1);
+  await expect(page.locator('.quieter-results .discovery-card')).toHaveCount(0);
+});
+
+test('a city outside the downloaded snapshot retrieves actual place listings without a key', async ({ page }) => {
+  const requests = [];
+  await mockGuides(page, params => {
+    requests.push(params);
+    return [wikiPage('Hyderabad', '{{IsPartOf|Telangana}}\n==See==\n{{see|name=Hidden Lake Garden|content=Hidden Lake Garden receives few visitors.}}\n{{see|name=Rock Garden|content=A peaceful landscaped garden.}}')];
+  });
+  await page.goto('./');
+  await search(page, '#hiddenplacehyderabad');
+  await expect(page.getByRole('heading', { name: 'Hidden Lake Garden' })).toBeVisible();
+  await expect(page.locator('.quieter-results .discovery-card')).toHaveCount(1);
+  await page.getByRole('button', { name: /See other places/ }).click();
+  await expect(page.getByRole('heading', { name: 'Rock Garden' })).toBeVisible();
+  expect(requests.length).toBeGreaterThan(0);
+  expect(requests.every(params => params.get('origin') === '*' && params.get('prop').includes('revisions'))).toBe(true);
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByText('TAVILY_API_KEY', { exact: false })).toHaveCount(0);
-  await page.getByRole('button', { name: /Field guide/ }).click();
-  await expect(page.locator('.place-card')).toHaveCount(6);
-  await expect(page.locator('.place-card').getByRole('heading', { name: 'Paradise Beach' })).toBeVisible();
-  await page.getByRole('button', { name: /Travel guides/ }).click();
-  await expect(page.locator('.web-result a[href="https://en.wikivoyage.org/wiki/Gokarna"]').first()).toBeVisible();
 });
 
-test('public results filter by their actual Wikimedia source', async ({ page }) => {
-  await mockWikimedia(page);
-  await page.goto('./', { waitUntil: 'domcontentloaded' });
-  await searchFor(page, '#hiddenplacegokarna');
-  await expect(page.locator('.web-result').first()).toBeVisible();
-  await page.getByRole('button', { name: 'Wikipedia', exact: true }).click();
-  await expect(page.locator('.web-result')).toHaveCount(1);
-  await expect(page.locator('.web-result a')).toHaveAttribute('href', 'https://en.wikipedia.org/wiki/Gokarna');
-  await page.getByRole('button', { name: 'Wikivoyage', exact: true }).click();
-  await expect(page.locator('.web-result').first()).toBeVisible();
-  const voyageLinks = await page.locator('.web-result a').evaluateAll(links => links.map(link => link.href));
-  expect(voyageLinks.length).toBeGreaterThan(0);
-  expect(voyageLinks.every(href => new URL(href).hostname === 'en.wikivoyage.org')).toBe(true);
-  await page.getByRole('button', { name: 'All guides', exact: true }).click();
-  await expect(page.locator('.web-result a[href="https://en.wikipedia.org/wiki/Gokarna"]')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Reddit', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Instagram', exact: true })).toHaveCount(0);
-  for (const link of await page.locator('.web-result a').all()) {
-    await expect(link).toHaveAttribute('target', '_blank');
-    await expect(link).toHaveAttribute('rel', /noopener/);
-  }
-});
-
-test('external web and social searches encode the query and open safely in a new tab', async ({ page }) => {
-  await mockWikimedia(page, { empty: true });
-  await page.goto('./', { waitUntil: 'domcontentloaded' });
-  await searchFor(page, 'Gokarna & Coorg #quiet coves');
-  const expected = [
-    ['Search the web', 'duckduckgo.com', 'gokarna & coorg quiet coves hidden places travel tips'],
-    ['Search Reddit', 'www.reddit.com', 'gokarna & coorg quiet coves travel tips'],
-    ['Search Instagram', 'www.google.com', 'site:instagram.com gokarna & coorg quiet coves hidden places'],
-  ];
-  for (const [name, hostname, query] of expected) {
-    const link = page.getByRole('link', { name, exact: true });
-    await expect(link).toBeVisible();
-    await expect(link).toHaveAttribute('target', '_blank');
-    await expect(link).toHaveAttribute('rel', /noopener/);
-    const href = await link.getAttribute('href');
-    const url = new URL(href);
-    expect(url.protocol).toBe('https:');
-    expect(url.hostname).toBe(hostname);
-    expect([...url.searchParams.keys()]).toEqual(['q']);
-    expect(url.searchParams.get('q')).toBe(query);
-    expect(url.hash).toBe('');
-    expect(href).toContain('%26');
-  }
-});
-
-test('saved places persist after reloading the project subpath', async ({ page }) => {
-  await mockWikimedia(page);
-  await page.goto('./', { waitUntil: 'domcontentloaded' });
-  await openGeneralGuides(page);
-  await page.getByRole('button', { name: 'Save Paradise Beach', exact: true }).click();
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await openGeneralGuides(page);
-  await expect(page.getByRole('button', { name: 'Unsave Paradise Beach', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: /Saved places/ }).click();
-  await expect(page.locator('.place-card')).toHaveCount(1);
-  await expect(page.getByRole('heading', { name: 'Paradise Beach', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Unsave Paradise Beach', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Your next adventure starts with a bookmark.' })).toBeVisible();
-});
-
-test('an unknown destination with empty public results does not show unrelated places', async ({ page }) => {
-  const requests = await mockWikimedia(page, { empty: true });
-  await page.goto('./', { waitUntil: 'domcontentloaded' });
-  await searchFor(page, 'Uncharted Zzyzx Valley');
-  await expect.poll(() => requests.length).toBeGreaterThanOrEqual(2);
-  await expect(page.getByRole('button', { name: 'Find my elsewhere', exact: true })).toBeEnabled();
-  await expect(page.locator('.web-result')).toHaveCount(0);
-  await expect(page.locator('.place-card')).toHaveCount(0);
-  await page.getByRole('button', { name: /Field guide/ }).click();
-  await expect(page.locator('.place-card')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'A little further off our map.' })).toBeVisible();
-});
-
-test('the home and public search views fit desktop and small phones', async ({ page }, testInfo) => {
-  await mockWikimedia(page);
-  await page.goto('./', { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('.place-card')).toHaveCount(6);
-  const initialViewport = page.viewportSize();
-  const widths = testInfo.project.name === 'mobile' ? [390, 320] : [1440];
-  for (const width of widths) {
-    await page.setViewportSize({ width, height: initialViewport.height });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  }
-  await searchFor(page, '#hiddenplacegokarna');
-  await expect(page.locator('.web-result').first()).toBeVisible();
-  for (const width of widths) {
-    await page.setViewportSize({ width, height: initialViewport.height });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  }
-});
-
-const indexFixture = {
-  schemaVersion: 1,
-  destinations: [
-    { id: 'gokarna', city: 'Gokarna', aliases: [], state: 'Karnataka', count: 1, status: 'partial', fetchedAt: '2026-10-28T10:00:00Z', attemptedAt: '2026-10-30T10:00:00Z', providers: [{ provider: 'wikivoyage', status: 'ok', count: 1 }, { provider: 'osm', status: 'unavailable', count: 0 }], warnings: ['The map source was unavailable.'], discussionStatus: { status: 'error' } },
-    { id: 'hampi', city: 'Hampi', aliases: [], state: 'Karnataka', count: 1, status: 'ok' },
-  ],
-  places: [
-    { id: 'g1', destinationId: 'gokarna', city: 'Gokarna', state: 'Karnataka', name: 'Test Coastal Cove', category: 'Beaches', description: 'A secluded cove described by the community guide.', coordinates: { lat: 14.5, lng: 74.3 }, discovery: { label: 'Offbeat signal found', score: 70, confidence: 'low', reasons: ['A source describes it as secluded'] }, sources: [{ publisher: 'Wikivoyage', title: 'Gokarna cove', url: 'https://en.wikivoyage.org/wiki/Gokarna', retrievedAt: '2026-10-28T10:00:00Z', updatedAt: '2026-09-01T10:00:00Z', license: 'CC BY-SA 4.0' }] },
-    { id: 'h1', destinationId: 'hampi', city: 'Hampi', state: 'Karnataka', name: 'Test Hampi Temple', category: 'Culture', description: 'A named temple.', discovery: { label: 'Worth investigating', score: 40, confidence: 'low', reasons: [] }, sources: [{ publisher: 'Wikivoyage', url: 'https://en.wikivoyage.org/wiki/Hampi' }] },
-  ],
-  discussions: [],
-};
-indexFixture.places[0].crowd = { status: 'quieter', confidence: 'low', reasons: ['A source explicitly reports fewer visitors.'], evidence: [{ url: 'https://en.wikivoyage.org/wiki/Gokarna', publisher: 'Wikivoyage', claim: 'The guide reports few visitors at this cove.', direction: 'quieter', sourceUpdatedAt: '2026-09-01T10:00:00Z', retrievedAt: '2026-10-28T10:00:00Z' }] };
-
-test('the collected index searches real place records and exposes source age and missing reviews', async ({ page }) => {
-  await mockWikimedia(page);
-  await page.route('**/data/india-index.json', route => route.fulfill({ json: indexFixture }));
+test('guide failures keep collected results visible and offer a retry', async ({ page }) => {
+  await page.route('https://en.wikivoyage.org/w/api.php?**', route => route.abort());
   await page.goto('./');
-  const index = page.getByRole('region', { name: 'Find quieter places' });
-  await expect(index.locator('.india-place')).toHaveCount(1);
-  await expect(index.getByText('Test Coastal Cove', { exact: true })).toBeVisible();
-  await index.getByText('Sources & why it appears', { exact: true }).click();
-  await expect(index.getByText(/Collected 28 Oct 2026 · Source updated 1 Sept 2026/)).toBeVisible();
-  await expect(index.getByText(/Visitor ratings are not available/)).toBeVisible();
-  await expect(index.getByText(/Discussion search was unavailable/)).toBeVisible();
-  await page.getByLabel('Index destination').selectOption('');
-  await expect(index.locator('.india-place')).toHaveCount(1);
-  await page.getByLabel('Crowd evidence').selectOption('all');
-  await expect(index.locator('.india-place')).toHaveCount(2);
-  await page.getByLabel('Index destination').selectOption('hampi');
-  await expect(index.getByText('Test Hampi Temple', { exact: true })).toBeVisible();
-  await expect(index.getByText('Test Coastal Cove', { exact: true })).toHaveCount(0);
-  await searchFor(page, '#hiddenplacegokarna');
-  await expect(index.getByText('Test Coastal Cove', { exact: true })).toBeVisible();
-  await expect(index.getByText('Test Hampi Temple', { exact: true })).toHaveCount(0);
-  await page.getByLabel('Index category').selectOption('Culture');
-  await expect(index.locator('.india-place')).toHaveCount(0);
+  await search(page, 'Jaipur');
+  await expect(page.getByText('The public guide couldn’t be reached.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Jaipur Garden' })).toBeVisible();
+  await mockGuides(page);
+  await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await expect(page.getByText('The public guide couldn’t be reached.', { exact: false })).toHaveCount(0);
 });
 
-test('an unavailable index leaves the rest of the static site usable', async ({ page }) => {
-  await mockWikimedia(page);
+test('missing places have a useful empty state without unrelated Gokarna results', async ({ page }) => {
+  await page.goto('./');
+  await search(page, 'Unlisted Village');
+  await expect(page.getByRole('heading', { name: 'No confirmed quieter spots here yet.' })).toBeVisible();
+  await expect(page.locator('.discovery-card')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /Search traveller discussions/ })).toHaveAttribute('href', /Unlisted%20Village/);
+  await page.getByRole('button', { name: 'All India', exact: true }).click();
+  await expect(page.locator('.quieter-results .discovery-card')).toHaveCount(4);
+});
+
+test('bookmarks persist and can be removed from the saved view', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: 'Save Goa Cove', exact: true }).click();
+  await page.reload();
+  await page.getByRole('button', { name: 'Saved (1)', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Your saved places' })).toBeVisible();
+  await expect(page.locator('.discovery-card')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Unsave Goa Cove', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Keep a few places for later.' })).toBeVisible();
+});
+
+test('sources and maps are direct links and details stay out of the main flow', async ({ page }) => {
+  await page.goto('./');
+  const card = page.locator('.discovery-card').first();
+  await expect(card.locator('details')).not.toHaveAttribute('open');
+  await expect(card.getByRole('link', { name: 'Read source' })).toHaveAttribute('href', 'https://en.wikivoyage.org/wiki/Gokarna#cove');
+  await expect(card.getByRole('link', { name: 'Find on map' })).toHaveAttribute('href', /maps\/search/);
+  await card.getByText('Details & sources', { exact: true }).click();
+  await expect(card.getByText('CC BY-SA 4.0', { exact: false })).toBeVisible();
+  await expect(card.getByText('Source date:', { exact: false })).toBeVisible();
+});
+
+test('shareable search URLs restore the place and narrow screens do not overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto('./?q=Kerala');
+  await expect(page.getByRole('combobox', { name: 'Search places in India' })).toHaveValue('Kerala');
+  await expect(page.getByRole('heading', { name: 'Kerala Cove', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Elsewhere home' }).click();
+  await expect(page.getByRole('combobox', { name: 'Search places in India' })).toHaveValue('');
+  await expect(page).not.toHaveURL(/q=/);
+});
+
+test('a failed snapshot still allows public city lookup', async ({ page }) => {
   await page.route('**/data/india-index.json', route => route.fulfill({ status: 503, body: 'Unavailable' }));
+  await mockGuides(page, () => [wikiPage('Hyderabad', '==See==\n{{see|name=Lake Garden|content=A park by the lake.}}')]);
   await page.goto('./');
-  await expect(page.getByText(/collected place index couldn’t load/)).toBeVisible();
-  await expect(page.locator('.place-card')).toHaveCount(6);
-  await expect(page.locator('.place-card').first()).not.toBeVisible();
-  await searchFor(page, 'Gokarna');
-  await expect(page.locator('.web-result').first()).toBeVisible();
-});
-
-test('official tourism records show their provider and factual source attribution', async ({ page }) => {
-  await mockWikimedia(page);
-  const fixture = structuredClone(indexFixture);
-  fixture.destinations[0].providers.push({ provider: 'scrapling', status: 'ok', count: 1 });
-  fixture.places[0].sources = [{ provider: 'scrapling', publisher: 'Karnataka Tourism', title: 'Test Coastal Cove', url: 'https://karnatakatourism.org/en/attractions/test-cove/', retrievedAt: '2026-10-30T10:00:00Z', license: 'Factual metadata; see source terms' }];
-  await page.route('**/data/india-index.json', route => route.fulfill({ json: fixture }));
-  await page.goto('./');
-  const index = page.getByRole('region', { name: 'Find quieter places' });
-  await index.getByText('Collection status', { exact: true }).click();
-  await expect(index.getByText('Official tourism websites: ok (1 places)', { exact: true })).toBeVisible();
-  await index.getByText('Sources & why it appears', { exact: true }).click();
-  await expect(index.locator('.india-source').getByText(/Place name and source link/)).toBeVisible();
-  await expect(index.locator('.india-source').getByText(/Text adapted/)).toHaveCount(0);
-});
-
-test('quiet discovery excludes busy, mixed and unknown records even when their old scores are higher', async ({ page }) => {
-  await mockWikimedia(page);
-  const fixture = structuredClone(indexFixture);
-  for (const [id, name, status] of [['busy', 'Om Beach', 'busy'], ['unknown', 'Mirjan Fort', 'unknown'], ['mixed', 'Morning-only Cove', 'mixed']]) {
-    fixture.places.push({ ...fixture.places[0], id, name, discovery: { score: 100 }, crowd: { status, confidence: 'low', evidence: [] } });
-  }
-  await page.route('**/data/india-index.json', route => route.fulfill({ json: fixture }));
-  await page.goto('./');
-  const index = page.getByRole('region', { name: 'Find quieter places' });
-  await expect(index.locator('.india-place h4')).toHaveText(['Test Coastal Cove']);
-  await expect(index.getByText('What supports this')).toBeVisible();
-  await expect(page.locator('.place-card').first()).not.toBeVisible();
-  await searchFor(page, 'less populated places in Gokarna', { general: false });
-  await expect(index.locator('.india-place h4')).toHaveText(['Test Coastal Cove']);
-  await expect(page.locator('.general-guides')).not.toHaveAttribute('open');
-  await page.getByLabel('Crowd evidence').selectOption('all');
-  await expect(index.locator('.india-place')).toHaveCount(4);
-  await searchFor(page, '#hiddenplacegokarna', { general: false });
-  await expect(page.getByLabel('Crowd evidence')).toHaveValue('quieter');
-  await expect(index.locator('.india-place h4')).toHaveText(['Test Coastal Cove']);
-  await searchFor(page, 'Hampi', { general: false });
-  await expect(index.locator('.india-place')).toHaveCount(0);
-  await expect(index.getByText(/don’t have enough specific evidence/)).toBeVisible();
+  await expect(page.getByText('The saved index couldn’t load.', { exact: false })).toBeVisible();
+  await search(page, 'Hyderabad');
+  await expect(page.getByRole('heading', { name: 'Lake Garden', exact: true })).toBeVisible();
+  await expect(page.getByText('Crowds unverified', { exact: true })).toBeVisible();
 });

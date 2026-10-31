@@ -1,7 +1,8 @@
+import hashlib
 import unittest
 from unittest.mock import MagicMock, patch
 
-from scrape_places import Document, collect, extract_places, fetch_document, public_url, robots_policy, validate_sources
+from scrape_places import Document, collect, extract_places, fetch_document, normalized_evidence, public_url, robots_policy, validate_sources
 
 DESTINATION = {'id': 'wayanad', 'city': 'Wayanad', 'state': 'Kerala', 'bbox': [11.4, 75.7, 12.0, 76.5]}
 SOURCE = {'id': 'wayanad-official', 'destinationId': 'wayanad', 'url': 'https://tourism.example.org/places/', 'publisher': 'District Tourism', 'parser': 'listing', 'scope': 'destination', 'itemSelector': '.place', 'nameSelector': 'h3', 'linkSelector': 'a', 'linkPattern': '^/place/', 'maxPlaces': 60}
@@ -32,6 +33,55 @@ CROWD_HTML = b'''<main><div>June 2026</div><h1>Gokarna Beaches</h1>
 
 
 class ScrapePlacesTests(unittest.TestCase):
+    def claim_source(self, paragraph='Test Lake receives few tourists. The visitor guide lists walking access.'):
+        return {**SOURCE, 'parser': 'crowd_claim', 'claims': [{
+            'id': 'test-lake', 'name': 'Test Lake', 'selector': '#test-lake p',
+            'evidenceSha256': hashlib.sha256(normalized_evidence(paragraph).encode()).hexdigest(),
+            'claim': 'The district guide describes Test Lake as receiving few tourists.',
+            'direction': 'quieter', 'conditional': False,
+            'context': 'General guide description; not a live headcount. Publication date unavailable.',
+        }]}
+
+    def test_reviewed_crowd_claim_requires_complete_unchanged_passage_and_publishes_no_source_prose(self):
+        body = b'<section id="test-lake"><h2>Test Lake</h2><p>Test Lake receives few tourists. The visitor guide lists walking access.</p></section>'
+        source = self.claim_source()
+        validate_sources({'schemaVersion': 1, 'sources': [source]}, [DESTINATION])
+        places = extract_places(body, source, DESTINATION, FETCHED)
+        self.assertEqual(len(places), 1)
+        evidence = places[0]['crowdEvidence'][0]
+        self.assertEqual(evidence['claimId'], 'test-lake')
+        self.assertEqual(evidence['direction'], 'quieter')
+        self.assertIsNone(evidence['publishedPeriod'])
+        self.assertNotIn('level', evidence)
+        self.assertNotIn('walking access', str(places))
+        self.assertNotIn('evidenceSha256', str(places))
+        for changed in [body.replace(b'few tourists', b'many tourists'), body.replace(b'</p>', b' But holidays are crowded.</p>'), body.replace(b'id="test-lake"', b'id="other-lake"'), body + body]:
+            self.assertEqual(extract_places(changed, source, DESTINATION, FETCHED), [])
+
+    def test_reviewed_claim_does_not_turn_peaceful_or_hidden_language_into_crowd_evidence(self):
+        for paragraph in ['Test Lake is scenic and peaceful.', 'Test Lake is a hidden gem.', 'Test Lake is secluded.']:
+            source = self.claim_source(paragraph)
+            body = f'<section id="test-lake"><p>{paragraph}</p></section>'.encode()
+            self.assertEqual(extract_places(body, source, DESTINATION, FETCHED), [])
+        source = self.claim_source()
+        source['claims'][0]['claim'] = 'Test Lake is a peaceful hidden gem.'
+        with self.assertRaises(ValueError):
+            validate_sources({'schemaVersion': 1, 'sources': [source]}, [DESTINATION])
+
+    def test_reviewed_time_qualified_claim_keeps_the_condition(self):
+        paragraph = 'Test Lake receives few tourists on weekdays.'
+        source = self.claim_source(paragraph)
+        source['claims'][0].update({'claim': 'The guide describes Test Lake as less crowded on weekdays.', 'conditional': True, 'context': 'Weekdays only; weekends may differ. Not a live headcount.'})
+        places = extract_places(f'<section id="test-lake"><p>{paragraph}</p></section>'.encode(), source, DESTINATION, FETCHED)
+        self.assertTrue(places[0]['crowdEvidence'][0]['conditional'])
+        self.assertIn('Weekdays', places[0]['crowdEvidence'][0]['context'])
+
+    def test_empty_selection_and_expired_budget_do_not_fetch_any_source(self):
+        fetch = MagicMock()
+        self.assertEqual(collect(MANIFEST, [DESTINATION], only=set(), fetch=fetch)['sources'], [])
+        self.assertEqual(collect(MANIFEST, [DESTINATION], deadline_seconds=0, fetch=fetch)['sources'], [])
+        fetch.assert_not_called()
+
     def test_scrapling_extracts_only_scoped_named_places_and_keeps_factual_attribution(self):
         places = extract_places(HTML, SOURCE, DESTINATION, FETCHED)
         self.assertEqual([place['name'] for place in places], ['Phantom Rock'])

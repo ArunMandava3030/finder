@@ -1,8 +1,10 @@
 # Elsewhere
 
-A place-discovery website for finding places with fewer crowds in Indian destinations. Search `hidden places in Gokarna` or `#hiddenplacegokarna`, inspect the crowd evidence and original sources, and save places for later. Primary results include only places supported as quieter; general travel guides sit in a separate, initially collapsed section with crowd levels marked unverified.
+A place-discovery website for finding quieter places across India. One search accepts a city, state, place name, or hashtag such as `#hiddenplacegokarna`. Source-linked cards offer maps, details, and a bookmark for saving places on the device. Quieter suggestions come first; other places are clearly labeled when crowd evidence is missing or qualified.
 
-The website is hosted on **GitHub Pages with no API keys or paid backend**. A scheduled GitHub Actions job collects an India destination index and publishes it with the frontend. Visitors search that snapshot in the browser; optional Wikipedia and Wikivoyage searches provide additional public guides.
+The website is hosted on **GitHub Pages with no API keys or paid backend**. A scheduled GitHub Actions job collects an India destination index and publishes it with the frontend. Visitors search that snapshot in the browser; searches needing more coverage also check public Wikivoyage listings.
+
+The destination registry contains **88 city and regional areas across all 28 states and 8 union territories**. Configured coverage is separate from collected records and quieter evidence: a listed city may have no qualifying places yet. The existing 25 destination IDs remain supported, alongside alternate spellings and former city names. Five destinations explicitly skip unavailable or overly broad Wikivoyage guides while retaining other source coverage.
 
 Live site: [ArunMandava3030.github.io/finder](https://ArunMandava3030.github.io/finder/).
 
@@ -32,26 +34,27 @@ Open [http://localhost:4173/finder/](http://localhost:4173/finder/). For a site 
 | --- | --- | --- |
 | OpenStreetMap through Overpass | Named points of interest, categories, coordinates, source links | Mapped coverage varies; shared APIs can be unavailable or rate limited. |
 | Wikivoyage | Destination listings, descriptions, coordinates where available, and source attribution | Community guide descriptions are not individual visitor reviews. |
-| Configured public HTML pages through Scrapling | Place listings and explicit crowd classifications from a configured official comparison table | Covers only the configured sources; blocked pages and changed markup can prevent collection. |
+| Configured public HTML pages through Scrapling | Place listings, official crowd-table classifications, and reviewed statements about fewer visitors | Covers only configured pages; blocked pages or changed evidence can prevent collection. |
 | DDGS search indexes | Destination-relevant links to publicly indexed Reddit discussion threads | Results can be empty, blocked, incomplete, or stale. No Reddit comment threads are fetched. |
-| Wikipedia and Wikivoyage browser search | Additional public guide results with original article links | Requires access to Wikimedia APIs when the visitor searches. |
-| Curated field guide | Selected places and attributed destination photos or clearly marked illustrative scenery | Editorial starting points, separate from collected source coverage. |
+| Wikivoyage browser lookup | Named sightseeing places with source links and revision dates | Requires Wikimedia access; unrecognized geography and unavailable guides do not produce invented results. |
 
-The scheduled collector combines source records, keeps their URLs and collection dates, and writes `public/data/india-index.json`. It processes destinations serially and bounds upstream requests. The browser reads this published file; GitHub Pages does not run a Python or Express server.
+The scheduled collector combines source records, keeps their URLs and collection dates, and writes `public/data/india-index.json`. It processes a bounded destination batch serially. The browser reads this published file; GitHub Pages does not run a Python or Express server. Its additional guide lookup verifies Indian geographic context, shares the server's listing parser, and limits request count, response size, and duration. It can check cities beyond the configured registry, but public guide coverage is not universal.
 
-HTML collection uses [Scrapling 0.5](https://pypi.org/project/scrapling/0.5/) to parse pages listed in `data/scrapling-sources.json`. The registry covers nine official tourism and district pages for Gokarna, Coorg, Wayanad, Munnar, and Dehradun. A small ordinary HTTP fetcher checks robots rules and bounds request time and response size before passing HTML to Scrapling's `Selector`. This uses the parser-only package: no browser download, browser impersonation, stealth fetcher, proxy rotation, or challenge solving is enabled. Source pages and their attribution remain attached to extracted places. Scrapling extracts configured pages; it does not search or crawl the entire web.
+HTML collection uses [Scrapling 0.5](https://pypi.org/project/scrapling/0.5/) to parse reviewed tourism and district pages listed in `data/scrapling-sources.json`. A small ordinary HTTP fetcher checks robots rules and bounds request time and response size before passing HTML to Scrapling's `Selector`. This uses the parser-only package: no browser download, browser impersonation, stealth fetcher, proxy rotation, or challenge solving is enabled. Source pages and their attribution remain attached to extracted places. Scrapling extracts configured pages; it does not search or crawl the entire web.
 
-The ninth source is [Karnataka Tourism's Gokarna beach comparison](https://karnatakatourism.org/en/blogs/gokarna-beaches/). Its eight valid rows classify five beaches as quieter, two as busy, and one as mixed. Nirvana, God's Own, and Small Hell have `very_low` crowd levels and rank before the `low` Half Moon and Paradise entries. These are the publisher's general classifications, not measured headcounts or a guarantee of an empty beach. The article's publication period, `2026-06`, is stored separately from retrieval time without inventing a day. The bounded `crowd_table` parser aligns cells to the named headers and excludes the malformed Belekan row rather than reading its Facilities value as a crowd level.
+For example, [Karnataka Tourism's Gokarna beach comparison](https://karnatakatourism.org/en/blogs/gokarna-beaches/) has eight valid rows: five quieter, two busy, and one mixed. Nirvana, God's Own, and Small Hell have `very_low` levels and rank before `low` entries. These are publisher classifications, not headcounts. The article period, `2026-06`, is separate from retrieval time. The bounded `crowd_table` parser aligns named headers and excludes the malformed Belekan row rather than using its Facilities value.
+
+Other reviewed official pages use `crowd_claim`: a narrow selector and hash of the complete normalized paragraph must still match before its short original summary is emitted. A changed paragraph requires review, so added qualifications or negation cannot silently preserve an old claim. The published registry stores hashes rather than long copied paragraphs. Prose does not acquire a numeric crowd level, and unknown publication dates remain unknown.
 
 Discussion collection uses Indian-region search and a requested year filter. It checks for destination words and genuine Reddit thread URLs before exporting a neutral label and link. User-written Reddit titles, excerpts, comments, author details, and ratings are discarded. A search engine's freshness filter does not establish a post's publication date, so unknown publication dates remain unknown.
 
 The initial snapshot also includes a small set of manually checked public discussion links, marked `collectionMethod: manual_search`. These keep their original discovery timestamps and any publication dates established from the source; a known calendar date is stored without inventing a publication time. They are starting links, not permanent seeds: a successful later discussion search can replace them, while search failures retain them with an earlier-collection label.
 
-**Quieter suggestions require explicit, place-specific evidence about visitors.** Words such as “hidden,” a peaceful atmosphere, coordinates, scarce reviews, and sparse web coverage do not establish fewer people. Unknown, mixed, and busy assessments are excluded from primary results. Conflicting, time-dependent, historically scoped, or stale crowd claims produce a mixed assessment; source dates, limitations, and links remain available for inspection. The broader discovery-fit estimate cannot qualify a place as quieter. If a destination has no qualifying evidence, the site says so instead of filling the list with popular attractions or general guides.
+**Quieter suggestions require explicit, place-specific evidence about visitors.** Words such as “hidden,” a peaceful atmosphere, coordinates, scarce reviews, and sparse web coverage do not establish fewer people. Unknown, mixed, and busy assessments cannot enter the quieter list. Conflicting, time-dependent, historically scoped, or stale crowd claims produce a mixed assessment; source dates, limitations, and links remain available in each card's details. If no quieter places qualify, the site says so and can show separately labeled places with unknown or mixed crowds. Busy places are excluded from exploration results. The broader discovery-fit estimate cannot qualify a place as quieter.
 
-No verified visitor ratings or direct reviews are supplied. Broader web, Reddit, and Instagram search links open those services separately; their results and reviews are not automatically imported. Direct Reddit API access requires [approval and authentication](https://support.reddithelp.com/hc/en-us/articles/16160319875092-Reddit-Data-API-Wiki). Private posts and content behind access controls are outside the collector's coverage.
+No verified visitor ratings or direct reviews are supplied. Traveller discussion links and Reddit search open the original service; comments are not automatically imported. Direct Reddit API access requires [approval and authentication](https://support.reddithelp.com/hc/en-us/articles/16160319875092-Reddit-Data-API-Wiki). Private posts and content behind access controls are outside the collector's coverage.
 
-Saved places use browser `localStorage`; there is no account or cross-device sync. Additional guide searches send the query directly to Wikimedia using its documented [public cross-origin API access](https://www.mediawiki.org/wiki/API:Cross-site_requests).
+Saved places use browser `localStorage`; there is no account or cross-device sync. Additional place lookups send the search term directly to Wikimedia using its documented [public cross-origin API access](https://www.mediawiki.org/wiki/API:Cross-site_requests).
 
 ## Refresh and deployment
 
@@ -61,13 +64,13 @@ Each run:
 
 1. Installs Node/Python dependencies and runs the unit tests.
 2. Attempts to restore a newer last-published index from this project's fixed Pages URL, with size, schema, date, and link validation. If it cannot, it keeps the repository snapshot.
-3. On scheduled or manual runs, prepares destination queries, checks public search indexes, collects all nine configured HTML sources with Scrapling, and refreshes OpenStreetMap/Wikivoyage records.
+3. On scheduled or manual runs, selects up to 20 destination areas and 20 reviewed HTML sources with the oldest collection attempts. It prepares discussion queries for that destination batch, collects those HTML sources, and refreshes OpenStreetMap/Wikivoyage records.
 4. Retains previous records when providers fail, keeping their source timestamps and reporting unavailable or stale coverage.
 5. Builds the static site and deploys its artifact to GitHub Pages.
 
 A scheduled refresh is not a guarantee of new places or new discussion links. The index generation time describes a build; individual source timestamps describe when data was collected. A failed provider must not make older records look newly retrieved. Empty or failed discussion searches retain earlier link-only observations for up to 30 days, marked stale; a successful non-empty search replaces that destination's links. Generated updates are published in the Pages artifact, not automatically committed to Git.
 
-Upstream collection runs on the six-hour schedule and manual dispatch. Code pushes test and deploy the latest available snapshot without making another round of requests to shared data services.
+Upstream collection runs on the six-hour schedule and manual dispatch. The nationwide catalog rotates through bounded batches; every city is not refreshed every six hours. Attempt timestamps keep unavailable providers rotating, while unattempted areas retain their previous records and dates. Code pushes test and deploy the latest available snapshot without making another round of requests to shared data services.
 
 In the repository, set **Settings → Pages → Build and deployment → Source → GitHub Actions**. No custom GitHub secrets are needed. The workflow sets `VITE_SEARCH_MODE=public` and `VITE_BASE_PATH=/finder/`. The build has a 30-minute limit, including up to five minutes for HTML collection and fifteen for the place-source refresh. Dependency/build/test failures stop deployment. Collection failures allow a valid previous snapshot to remain available.
 
@@ -78,13 +81,14 @@ To refresh data locally, install Python 3.13 and use a virtual environment:
 ```powershell
 python -m venv .local/search-venv
 & ./.local/search-venv/Scripts/python.exe -m pip install -r search-service/requirements-dev.txt
-npm run data:queries
+node scripts/select-refresh-batch.mjs --limit 20 --source-limit 20
+npm run data:queries -- --batch .local/refresh-batch.json
 & ./.local/search-venv/Scripts/python.exe search-service/search_batch.py --input .local/discussion-queries.json --output .local/discussion-results.json
-& ./.local/search-venv/Scripts/python.exe search-service/scrape_places.py --sources data/scrapling-sources.json --destinations data/india-destinations.json --output .local/scraped-places.json
-npm run data:refresh -- --evidence .local/discussion-results.json --scraped .local/scraped-places.json
+& ./.local/search-venv/Scripts/python.exe search-service/scrape_places.py --sources data/scrapling-sources.json --destinations data/india-destinations.json --batch .local/refresh-batch.json --budget-seconds 200 --output .local/scraped-places.json
+npm run data:refresh -- --batch .local/refresh-batch.json --budget-seconds 720 --evidence .local/discussion-results.json --scraped .local/scraped-places.json
 ```
 
-On macOS/Linux, the virtual environment's executable is `.local/search-venv/bin/python`. To collect only place sources, run `npm run data:refresh`. To limit place collection, use `npm run data:refresh -- --destinations gokarna,hampi`. To merge a validated discussion batch into the existing index without collecting places, pass `--destinations none --evidence .local/discussion-results.json`.
+On macOS/Linux, the virtual environment's executable is `.local/search-venv/bin/python`. For place sources alone, use `npm run data:refresh -- --batch .local/refresh-batch.json --budget-seconds 720`. To refresh particular areas, use `npm run data:refresh -- --destinations gokarna,hampi`; omitting both destination and batch options requests the full catalog. To merge a validated discussion batch without collecting places, pass `--destinations none --evidence .local/discussion-results.json`.
 
 For just the configured HTML sources, run the Scrapling command above and then `npm run data:refresh -- --destinations none --scraped .local/scraped-places.json`. Its `--only` option accepts comma-separated source IDs from the manifest. Scheduled jobs merge a collector output only when the file exists; provider failures keep earlier data with its original dates. The scheduled environment uses Python 3.13, and the parser integration has also been checked on Python 3.14.
 
@@ -116,7 +120,7 @@ Push-Location search-service
 Pop-Location
 ```
 
-The Node suite covers data normalization, ranking, source failures, and snapshot restoration. Python tests use controlled search responses for query bounds, relevance, thread links, text removal, pacing, and error handling. Browser tests exercise public search, filters, saved places, source links, and desktop/mobile layouts with controlled responses.
+The Node suite covers nationwide registry bounds, query matching, shared listing parsing, crowd evidence, source failures, batch rotation, and snapshot restoration. Python tests check source selectors and evidence hashes as well as search bounds, relevance, pacing, and failures. Browser tests exercise nationwide search, saved places, source links, and desktop/mobile layouts with controlled responses.
 
 Browser tests need the corresponding frontend build. On Linux/macOS, install Chromium first with `npx playwright install chromium`. On Windows the configuration uses a project-local Chromium installation when available, otherwise Microsoft Edge:
 
@@ -131,7 +135,7 @@ Screenshots and local collector outputs stay in ignored `.local/`. Offline tests
 
 ## Optional full server mode
 
-The repository also retains an Express search integration for separate local or server deployments. It is not used by the GitHub Pages site or scheduled data refresh.
+The repository also retains its earlier interface and Express search integration for separate local or server deployments. This includes the editorial field guide and broader web-search integrations; these are not part of the simplified public interface or its live lookup.
 
 Copy `.env.example` to `.env` only if no local file already exists. Set `VITE_SEARCH_MODE=server`, `VITE_BASE_PATH=/`, `PORT=3001`, and `SEARXNG_URL=http://localhost:8080`. A self-hosted [SearXNG](https://github.com/searxng/searxng) instance must enable JSON output; see its [search API documentation](https://docs.searxng.org/dev/search_api.html).
 

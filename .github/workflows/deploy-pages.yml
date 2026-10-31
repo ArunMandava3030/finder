@@ -57,9 +57,13 @@ jobs:
       - name: Restore last published index
         run: node scripts/load-last-index.mjs
 
+      - name: Select oldest destination and source batches
+        if: github.event_name != 'push'
+        run: node scripts/select-refresh-batch.mjs --limit 20 --source-limit 20
+
       - name: Prepare destination search queries
         if: github.event_name != 'push'
-        run: npm run data:queries
+        run: npm run data:queries -- --batch .local/refresh-batch.json
 
       - name: Find indexed traveller discussion links
         if: github.event_name != 'push'
@@ -71,7 +75,7 @@ jobs:
         if: github.event_name != 'push'
         continue-on-error: true
         timeout-minutes: 5
-        run: python search-service/scrape_places.py --sources data/scrapling-sources.json --destinations data/india-destinations.json --output .local/scraped-places.json
+        run: python search-service/scrape_places.py --sources data/scrapling-sources.json --destinations data/india-destinations.json --batch .local/refresh-batch.json --budget-seconds 200 --output .local/scraped-places.json
 
       - name: Refresh India places and source links
         if: github.event_name != 'push'
@@ -79,7 +83,7 @@ jobs:
         timeout-minutes: 15
         shell: bash
         run: |
-          refresh_args=()
+          refresh_args=(--batch .local/refresh-batch.json --budget-seconds 720)
           if [ -f .local/discussion-results.json ]; then
             refresh_args+=(--evidence .local/discussion-results.json)
           fi

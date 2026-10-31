@@ -11,6 +11,7 @@ const LICENSE = 'Factual metadata; see source terms';
 const statuses = new Set(['ok', 'empty', 'unavailable', 'blocked']);
 const categories = new Set(['Beaches', 'Nature', 'Trails', 'Culture', 'Attractions']);
 const crowdDirections = { very_low: 'quieter', low: 'quieter', moderate: 'mixed', high: 'busy' };
+const explicitCrowd = /\b(?:uncrowded|unfrequented|(?:less|least|lightly|sparsely|rarely|seldom)[ -](?:crowded|visited|frequented)|(?:few|fewer|hardly any|not many)\s+(?:people|visitors|tourists|travellers|travelers)|(?:little|low|minimal|limited)\s+(?:crowding|crowds?|footfall|visitor numbers)|(?:without|away from|far from)\s+(?:the\s+)?crowds?|not\s+(?:very\s+)?crowded|crowd[ -]free|crowded|overcrowded)\b/i;
 const socialHosts = ['reddit.com', 'instagram.com', 'facebook.com', 'twitter.com', 'x.com', 'tiktok.com', 'youtube.com', 'tripadvisor.com', 'quora.com'];
 const failure = message => Object.assign(new Error(message), { code: 'INVALID_SCRAPLING_BATCH' });
 const hash = value => createHash('sha256').update(value).digest('hex').slice(0, 16);
@@ -54,6 +55,17 @@ function registrySources(registry, destinationList) {
     if (entry.scope === 'selected_places' && !entry.allowedNames?.length) throw failure('A narrowly scoped Scrapling source requires allowed names.');
     if (entry.allowedPaths !== undefined && (!Array.isArray(entry.allowedPaths) || !entry.allowedPaths.length || entry.allowedPaths.length > MAX_PLACES_PER_SOURCE || entry.allowedPaths.some(value => typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || /[?#]/.test(value)))) throw failure('The Scrapling source registry contains invalid allowed paths.');
     if (entry.placeDetails !== undefined && (!entry.placeDetails || typeof entry.placeDetails !== 'object' || Array.isArray(entry.placeDetails) || Object.keys(entry.placeDetails).length > MAX_PLACES_PER_SOURCE || Object.entries(entry.placeDetails).some(([name, details]) => !name.trim() || !details || typeof details !== 'object' || Array.isArray(details) || Object.entries(details).some(([key, value]) => !['area', 'accessNotes'].includes(key) || typeof value !== 'string' || !value.trim() || value.length > 500)))) throw failure('The Scrapling source registry contains invalid place details.');
+    if (entry.parser === 'crowd_claim') {
+      if (!Array.isArray(entry.claims) || !entry.claims.length || entry.claims.length > Math.min(20, entry.maxPlaces || 60)) throw failure('A crowd source requires bounded reviewed claims.');
+      const ids = new Set(), names = new Set();
+      for (const claim of entry.claims) {
+        if (!claim || !/^[a-z0-9-]{1,80}$/.test(claim.id || '') || ids.has(claim.id) || !['quieter', 'busy'].includes(claim.direction) || typeof claim.conditional !== 'boolean') throw failure('The source registry contains an invalid crowd claim.');
+        for (const [key, limit] of [['name', 160], ['selector', 500], ['claim', 360], ['context', 300]]) if (typeof claim[key] !== 'string' || claim[key].trim().length < 3 || claim[key].length > limit) throw failure('A reviewed crowd claim contains invalid text.');
+        if (names.has(normalizedName(claim.name)) || !/^[a-f0-9]{64}$/.test(claim.evidenceSha256 || '') || !explicitCrowd.test(claim.claim)) throw failure('A reviewed crowd claim needs an explicit visitor statement and the full reviewed passage hash.');
+        ids.add(claim.id);
+        names.add(normalizedName(claim.name));
+      }
+    }
     result.set(entry.id, { ...entry, url: url.href, publisher: text(entry.publisher, 120), destination, allowedOrigins, maxPlaces: Math.max(1, Math.min(Number(entry.maxPlaces) || 60, MAX_PLACES_PER_SOURCE)) });
   }
   return result;
@@ -100,6 +112,19 @@ function normalizePlace(input, source, fetchedAt) {
       claim: `The tourism guide classifies ${name} crowd levels as ${candidate.level.replace('_', ' ')}.`,
       direction: crowdDirections[candidate.level], level: candidate.level, sourceUpdatedAt: null, publishedPeriod,
       retrievedAt: fetchedAt, conditional: false, context: 'General guide comparison; not a live headcount.',
+      sourceType: 'official', provider: 'scrapling', sourceId: source.id,
+    }];
+  } else if (source.parser === 'crowd_claim') {
+    if (!Array.isArray(input.crowdEvidence) || input.crowdEvidence.length !== 1 || sources.some(item => item.url !== source.url)) return null;
+    const candidate = input.crowdEvidence[0];
+    const claim = source.claims.find(item => item.id === candidate?.claimId && normalizedName(item.name) === normalizedName(name));
+    if (!claim || candidate.direction !== claim.direction || candidate.conditional !== claim.conditional || candidate.level != null || candidate.provider !== 'scrapling' || candidate.sourceId !== source.id || candidate.publisher !== source.publisher || safeUrl(candidate.url)?.href !== source.url || candidate.sourceType !== 'official' || candidate.sourceUpdatedAt != null || candidate.publishedPeriod != null) return null;
+    // Source text stays in the reviewed registry. Publish only the approved factual
+    // paraphrase and never infer a numeric level from comparative prose.
+    crowdEvidence = [{
+      url: source.url, publisher: source.publisher, claim: claim.claim, claimId: claim.id,
+      direction: claim.direction, sourceUpdatedAt: null, publishedPeriod: null,
+      retrievedAt: fetchedAt, conditional: claim.conditional, context: claim.context,
       sourceType: 'official', provider: 'scrapling', sourceId: source.id,
     }];
   } else if (input.crowdEvidence !== undefined && (!Array.isArray(input.crowdEvidence) || input.crowdEvidence.length)) return null;
