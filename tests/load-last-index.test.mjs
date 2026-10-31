@@ -52,6 +52,22 @@ test('keeps a newer repository snapshot and falls back byte-for-byte on provider
   });
 });
 
+test('a later run from an older commit cannot remove a newer crowd-evidence methodology', async () => {
+  await withTarget(async target => {
+    const current = { ...fixture(), methodology: { version: 2 } };
+    current.places[0].crowd = { status: 'quieter', evidence: [] };
+    const saved = JSON.stringify(current);
+    await writeFile(target, saved);
+    const laterOldRun = { ...fixture('2026-01-03T00:00:00Z'), methodology: { version: 1 } };
+    const result = await loadLastIndex({ target, log: () => {}, fetchImpl: async () => response(laterOldRun) });
+    assert.deepEqual(result, { status: 'kept', reason: 'older_methodology' });
+    assert.equal(await readFile(target, 'utf8'), saved);
+    const compatible = { ...current, generatedAt: '2026-01-04T00:00:00Z' };
+    assert.equal((await loadLastIndex({ target, log: () => {}, fetchImpl: async () => response(compatible) })).status, 'restored');
+    assert.deepEqual(JSON.parse(await readFile(target, 'utf8')), compatible);
+  });
+});
+
 test('rejects malformed snapshots, unsafe URLs, future dates, and copied social text', () => {
   const invalid = [
     (index) => { index.schemaVersion = 99; },

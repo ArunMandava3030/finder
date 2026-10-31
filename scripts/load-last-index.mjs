@@ -112,6 +112,13 @@ export async function loadLastIndex({ target = DEFAULT_TARGET, fetchImpl = fetch
       headers: { accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(12_000),
     });
     const published = validateIndex(await readBoundedJson(response));
+    // A scheduled run from an older commit can finish after a new data model was
+    // checked in. Its later timestamp must not remove the new recommendation fields.
+    const methodologyVersion = index => Number.isInteger(index?.methodology?.version) ? index.methodology.version : 1;
+    if (previous && methodologyVersion(previous) > methodologyVersion(published)) {
+      log('Keeping the repository snapshot; the published index uses an older discovery methodology.');
+      return { status: 'kept', reason: 'older_methodology' };
+    }
     if (previous && Date.parse(previous.generatedAt) >= Date.parse(published.generatedAt)) {
       log('Keeping the repository snapshot; it is at least as recent as the published index.');
       return { status: 'kept', reason: 'not_newer' };
