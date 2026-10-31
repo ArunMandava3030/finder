@@ -6,6 +6,7 @@ import { destinations } from '../server/discovery/destinations.mjs';
 import { setTimeout as pause } from 'node:timers/promises';
 import { rankPlaces } from '../server/discovery/rank.mjs';
 import { retainEarlierDiscussionLinks } from '../server/discovery/discussions.mjs';
+import { readScraplingBatch, mergeScraplingBatch } from '../server/providers/scrapling.mjs';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : fallback; };
@@ -18,6 +19,14 @@ const selected = choice === 'none' ? [] : choice === 'all' ? destinations : choi
 });
 let previous = { destinations: [], places: [], discussions: [] };
 try { previous = JSON.parse(await readFile(target, 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+const scrapedFile = option('--scraped', null);
+let scrapedBatch = null;
+if (scrapedFile) {
+  const registryFile = option('--scraping-registry', new URL('../data/scrapling-sources.json', import.meta.url));
+  const registry = JSON.parse(await readFile(registryFile, 'utf8'));
+  // Reject malformed input before starting any provider work or changing the output.
+  scrapedBatch = await readScraplingBatch(scrapedFile, { registry });
+}
 const engine = createDiscoveryEngine();
 const records = new Map(previous.destinations.map(destination => [destination.id, destination]));
 const keyForPlace = place => `${place.destinationId}:${place.id}`;
@@ -58,6 +67,32 @@ for (const destination of selected) {
   }
 }
 
+let scraping = previous.scraping || null;
+if (scrapedBatch) {
+  const merged = mergeScraplingBatch([...placeMap.values()], scrapedBatch, { previousScraping: scraping });
+  placeMap.clear();
+  for (const place of merged.places) placeMap.set(keyForPlace(place), place);
+  scraping = merged.scraping;
+  for (const { destinationId, ...provider } of merged.destinationProviders) {
+    const destination = destinations.find(item => item.id === destinationId);
+    if (!destination) continue;
+    const previousRecord = records.get(destinationId);
+    const providers = [...(previousRecord?.providers || []).filter(item => item.provider !== 'scrapling'), provider];
+    const count = merged.places.filter(place => place.destinationId === destinationId).length;
+    const freshSources = scrapedBatch.sources.filter(source => source.destinationId === destinationId && source.status === 'ok');
+    const fetchedAt = [...freshSources.map(source => source.fetchedAt), previousRecord?.fetchedAt].filter(Boolean).sort().at(-1) || null;
+    const attemptedAt = [provider.attemptedAt, previousRecord?.attemptedAt].filter(Boolean).sort().at(-1) || null;
+    const allOk = providers.every(item => item.status === 'ok');
+    const hasRetained = providers.some(item => item.retainedCount > 0);
+    const previousScrapingWarnings = new Set((previous.scraping?.sources || []).filter(source => source.destinationId === destinationId).flatMap(source => source.warnings || []));
+    records.set(destinationId, {
+      ...previousRecord, ...destination, count, fetchedAt, attemptedAt, providers,
+      status: count ? hasRetained ? 'stale' : allOk ? 'ok' : 'partial' : allOk ? 'ok' : 'unavailable',
+      warnings: [...new Set([...(previousRecord?.warnings || []).filter(warning => !previousScrapingWarnings.has(warning)), ...scraping.sources.filter(source => source.destinationId === destinationId).flatMap(source => source.warnings || [])])],
+    });
+  }
+}
+
 const evidenceFile = option('--evidence', null);
 let discussions = previous.discussions || [];
 if (evidenceFile) {
@@ -94,12 +129,14 @@ const output = {
   generatedAt: new Date().toISOString(),
   destinations: destinations.map(destination => records.get(destination.id) || { ...destination, count: 0, status: 'not_collected', fetchedAt: null, warnings: [] }),
   places,
+  ...(scraping ? { scraping } : {}),
   discussions: [...new Map(discussions.map(item => [`${item.destinationId}:${item.url}`, item])).values()],
-  stats: { places: places.length, destinationsWithData: new Set(places.map(place => place.destinationId)).size, refreshedThisRun: succeeded, indexedDiscussions: discussions.length },
+  stats: { places: places.length, destinationsWithData: new Set(places.map(place => place.destinationId)).size, refreshedThisRun: succeeded, indexedDiscussions: discussions.length, scrapedPlaces: places.filter(place => place.sources.some(source => source.provider === 'scrapling')).length },
   methodology: { version: 1, scoreLabel: 'Discovery fit', explanation: 'A rule-based estimate using source descriptions, mapped location, category and independent source corroboration. Missing ratings or low web coverage do not prove a place is hidden or underrated.', reviews: 'No verified visitor ratings are available. Community guide descriptions and indexed discussion links are distinct from reviews.', freshness: 'Periodically refreshed observations, not real-time reviews. Check each source date and the original page.' },
   attribution: [
     { name: 'OpenStreetMap contributors', license: 'ODbL', url: 'https://www.openstreetmap.org/copyright' },
     { name: 'Wikivoyage contributors', license: 'CC BY-SA 4.0', url: 'https://en.wikivoyage.org/wiki/Wikivoyage:Copyleft' },
+    ...[...new Map((scraping?.sources || []).map(source => [source.publisher, { name: source.publisher, license: 'Factual metadata; see source terms', url: source.url }])).values()],
   ],
 };
 await mkdir(path.dirname(target), { recursive: true });

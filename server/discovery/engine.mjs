@@ -36,6 +36,7 @@ async function boundedTask(run, timeoutMs, code) {
 }
 
 function sourceProvider(source) {
+  if (source.provider === 'scrapling') return 'scrapling';
   if (source.publisher === 'OpenStreetMap' || source.kind === 'map') return 'osm';
   if (source.publisher === 'Wikivoyage') return 'wikivoyage';
   return null;
@@ -124,7 +125,7 @@ export function createDiscoveryEngine({
     const recent = recentAttempts.get(destination.id);
     if (!refresh && recent && recent.expires > now()) return { ...recent.value, cached: true };
     const age = previous ? now() - Date.parse(previous.fetchedAt) : Infinity;
-    const complete = previous?.providers?.every(provider => provider.status === 'ok');
+    const complete = previous?.providers?.filter(provider => ['wikivoyage', 'osm'].includes(provider.provider)).every(provider => provider.status === 'ok');
     if (!refresh && age >= 0 && age < (complete ? cacheTtlMs : partialCacheTtlMs)) return { ...previous, cached: true };
     if (pending.has(destination.id)) return waitFor(pending.get(destination.id), signal);
     if (pending.size >= boundedNumber(maxConcurrentDiscoveries, 2, 4)) {
@@ -165,6 +166,18 @@ export function createDiscoveryEngine({
           ...(response.status === 'rejected' && /^OSM_(?:UNAVAILABLE|TIMEOUT|RATE_LIMITED)$|^DISCOVERY_TIMEOUT$/.test(response.reason?.code || '') ? { errorCode: response.reason.code } : {}),
         });
       });
+      // These providers are refreshed by the offline pipeline, not by these API calls.
+      // Keep their original observations and status instead of silently dropping them.
+      const externalPlaces = (previous?.places || []).flatMap(place => {
+        const sources = (place.sources || []).filter(source => !['wikivoyage', 'osm'].includes(sourceProvider(source)));
+        const scraperSource = sources.find(source => source.provider === 'scrapling');
+        const description = sources.find(source => source.excerpt)?.excerpt || (scraperSource ? `Listed by ${scraperSource.publisher}. Open the original source for place details and current visitor information.` : '');
+        return sources.length ? [{ ...place, sources, description }] : [];
+      });
+      places.push(...externalPlaces);
+      const apiComplete = providers.every(provider => provider.status === 'ok');
+      providers.push(...(previous?.providers || []).filter(provider => !['wikivoyage', 'osm'].includes(provider.provider)));
+      retained ||= !fresh && externalPlaces.length > 0;
       if (!fresh && !previous?.places?.length) throw failure('DISCOVERY_UNAVAILABLE', 'Place data providers are unavailable. Try again later.', 502);
       const value = {
         destination, fetchedAt: fresh ? attemptedAt : previous.fetchedAt, attemptedAt,
@@ -172,7 +185,7 @@ export function createDiscoveryEngine({
       };
       // Persist fresh records together with retained sources; never relabel their observation dates.
       if (fresh) await store.put(destination.id, value);
-      recentAttempts.set(destination.id, { value, expires: now() + (providers.every(provider => provider.status === 'ok') ? cacheTtlMs : partialCacheTtlMs) });
+      recentAttempts.set(destination.id, { value, expires: now() + (apiComplete ? cacheTtlMs : partialCacheTtlMs) });
       return value;
     })();
     pending.set(destination.id, task);

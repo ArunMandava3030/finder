@@ -3,6 +3,8 @@ import { ArrowUpRight, MapPin } from 'lucide-react';
 import { destinationsForQuery, formatSourceDate, selectIndexPlaces, validateIndex } from '../lib/india-index.js';
 import './india-discovery.css';
 
+const providerNames = { osm: 'OpenStreetMap', wikivoyage: 'Wikivoyage', scrapling: 'Official tourism websites' };
+
 function IndexedPlace({ place }) {
   return <article className="india-place">
     <div className="india-place-meta">{place.city}, {place.state} · {place.category}</div>
@@ -19,7 +21,7 @@ function IndexedPlace({ place }) {
       {place.sources.map(source => <div className="india-source" key={source.url}>
         <a href={source.url} target="_blank" rel="noopener noreferrer">{source.publisher}: {source.title || place.name} <ArrowUpRight size={13} /></a>
         <small>Collected {formatSourceDate(source.retrievedAt)} · Source updated {formatSourceDate(source.updatedAt)}{source.listingUpdatedAt ? ` · Listing updated ${formatSourceDate(source.listingUpdatedAt)}` : ''}</small>
-        {source.license && <small>{source.license} · Text adapted from the linked source</small>}
+        {source.license && <small>{source.license}{source.provider === 'scrapling' ? ' · Place name and source link' : ' · Text adapted from the linked source'}</small>}
       </div>)}
     </details>
   </article>;
@@ -51,10 +53,10 @@ export default function IndiaDiscovery({ query = '' }) {
   const discussions = data.discussions.filter(item => activeId ? item.destinationId === activeId : matched.some(city => city.id === item.destinationId)).slice(0, 8);
   return <section className="india-discovery" aria-labelledby="india-index-heading">
     <div className="india-index-heading">
-      <div><span className="section-eyebrow">COLLECTED FROM COMMUNITY SOURCES</span><h3 id="india-index-heading">Explore the India place index</h3></div>
+      <div><span className="section-eyebrow">COLLECTED FROM TRAVEL SOURCES</span><h3 id="india-index-heading">Explore the India place index</h3></div>
       <span>{data.places.length.toLocaleString('en-IN')} places · {covered}/{data.destinations.length} destinations</span>
     </div>
-    <p className="india-explanation">Named places, community travel advice, and mapped locations. Refreshes are scheduled every 6 hours; source dates show what was actually collected. Visitor ratings are not available.</p>
+    <p className="india-explanation">Official tourism listings, community travel advice, and mapped locations. Refreshes are scheduled every 6 hours; source dates show what was actually collected. Visitor ratings are not available.</p>
     <div className="india-controls">
       <label>Destination<select aria-label="Index destination" value={activeId} onChange={event => { setDestinationId(event.target.value); setLimit(6); }}>
         <option value="">{query ? 'Matching destinations' : 'All India destinations'}</option>
@@ -69,7 +71,7 @@ export default function IndiaDiscovery({ query = '' }) {
       <strong>{destination.city}</strong> · {found.length} matching places · Collected {formatSourceDate(destination.fetchedAt)}
       {destination.status !== 'ok' && <span>Partial coverage{destination.status === 'stale' ? ' · Showing earlier data' : ''}</span>}
       <details><summary>Collection status</summary>
-        {(destination.providers || []).map(provider => <p key={provider.provider}>{provider.provider === 'osm' ? 'OpenStreetMap' : 'Wikivoyage'}: {provider.status}{Number.isFinite(provider.count) ? ` (${provider.count} places)` : ''}</p>)}
+        {(destination.providers || []).map(provider => <p key={provider.provider}>{providerNames[provider.provider] || 'Other travel source'}: {provider.status}{Number.isFinite(provider.count) ? ` (${provider.count} places)` : ''}</p>)}
         {(destination.warnings || []).map((warning, i) => <p key={i}>{warning}</p>)}
         <p>Last attempt: {formatSourceDate(destination.attemptedAt)}. Page revision dates can reflect edits elsewhere in the guide; check the original listing for current access.</p>
       </details>

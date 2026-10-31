@@ -41,6 +41,16 @@ function distinctiveWords(name) {
   return [...new Set(name.split(' ').filter(word => !genericNameWords.has(word)))].sort().join(' ');
 }
 
+function placeDescription(place) {
+  const description = typeof place.description === 'string' ? place.description.trim() : '';
+  const factual = /^Listed by .+\. Open the original source for place details and current visitor information\.$/.test(description);
+  const sources = Array.isArray(place.sources) ? place.sources : [];
+  const excerpt = sources.find(source => source.provider !== 'scrapling' && typeof source.excerpt === 'string' && source.excerpt.trim())?.excerpt;
+  // Restore a real source description if a previously merged snapshot kept the generic listing notice.
+  if ((!description || factual) && excerpt) return { text: excerpt, factual: false };
+  return { text: description, factual: factual || (sources.length > 0 && sources.every(source => source.provider === 'scrapling')) };
+}
+
 function distance(a, b) {
   if (!validCoordinates(a) || !validCoordinates(b)) return Infinity;
   const rad = Math.PI / 180;
@@ -78,12 +88,14 @@ export function mergePlaces(input) {
       return Boolean(distinctive) && distinctive === distinctiveWords(otherName) && separation < 150;
     });
     if (!existing) {
-      merged.push({ ...place, aliases: aliasesFor(place), sources: [...place.sources] });
+      merged.push({ ...place, description: placeDescription(place).text, aliases: aliasesFor(place), sources: [...place.sources] });
       continue;
     }
     existing.aliases = aliasesFor(existing, [place.name, ...(Array.isArray(place.aliases) ? place.aliases : [])]);
     existing.coordinates ||= place.coordinates;
-    if ((place.description?.length || 0) > (existing.description?.length || 0)) existing.description = place.description;
+    const previousDescription = placeDescription(existing);
+    const incomingDescription = placeDescription(place);
+    if (incomingDescription.text && (!previousDescription.text || (previousDescription.factual && !incomingDescription.factual) || (previousDescription.factual === incomingDescription.factual && incomingDescription.text.length > previousDescription.text.length))) existing.description = incomingDescription.text;
     existing.tags = [...new Set([...(existing.tags || []), ...(place.tags || [])])];
     existing.sources = [...new Map([...existing.sources, ...place.sources].map(source => [source.url, source])).values()];
     if (['Other', 'Attractions'].includes(existing.category)) existing.category = place.category;

@@ -17,7 +17,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     permissions:
       contents: read
       pages: read
@@ -67,17 +67,26 @@ jobs:
         timeout-minutes: 6
         run: python search-service/search_batch.py --input .local/discussion-queries.json --output .local/discussion-results.json
 
+      - name: Extract configured place listings with Scrapling
+        if: github.event_name != 'push'
+        continue-on-error: true
+        timeout-minutes: 5
+        run: python search-service/scrape_places.py --sources data/scrapling-sources.json --destinations data/india-destinations.json --output .local/scraped-places.json
+
       - name: Refresh India places and source links
         if: github.event_name != 'push'
         continue-on-error: true
         timeout-minutes: 15
         shell: bash
         run: |
+          refresh_args=()
           if [ -f .local/discussion-results.json ]; then
-            npm run data:refresh -- --evidence .local/discussion-results.json
-          else
-            npm run data:refresh
+            refresh_args+=(--evidence .local/discussion-results.json)
           fi
+          if [ -f .local/scraped-places.json ]; then
+            refresh_args+=(--scraped .local/scraped-places.json)
+          fi
+          npm run data:refresh -- "${refresh_args[@]}"
 
       - name: Build public site
         run: npm run build

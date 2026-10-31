@@ -244,3 +244,18 @@ test('an unavailable index leaves the rest of the static site usable', async ({ 
   await searchFor(page, 'Gokarna');
   await expect(page.locator('.web-result').first()).toBeVisible();
 });
+
+test('official tourism records show their provider and factual source attribution', async ({ page }) => {
+  await mockWikimedia(page);
+  const fixture = structuredClone(indexFixture);
+  fixture.destinations[0].providers.push({ provider: 'scrapling', status: 'ok', count: 1 });
+  fixture.places[0].sources = [{ provider: 'scrapling', publisher: 'Karnataka Tourism', title: 'Test Coastal Cove', url: 'https://karnatakatourism.org/en/attractions/test-cove/', retrievedAt: '2026-10-30T10:00:00Z', license: 'Factual metadata; see source terms' }];
+  await page.route('**/data/india-index.json', route => route.fulfill({ json: fixture }));
+  await page.goto('./');
+  const index = page.getByRole('region', { name: 'Explore the India place index' });
+  await index.getByText('Collection status', { exact: true }).click();
+  await expect(index.getByText('Official tourism websites: ok (1 places)', { exact: true })).toBeVisible();
+  await index.getByText('Sources & why it appears', { exact: true }).click();
+  await expect(index.locator('.india-source').getByText(/Place name and source link/)).toBeVisible();
+  await expect(index.locator('.india-source').getByText(/Text adapted/)).toHaveCount(0);
+});

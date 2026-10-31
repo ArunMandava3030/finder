@@ -1,6 +1,23 @@
-# Optional keyless search adapter
+# Keyless collection and optional search adapter
 
-This Python component supports explicit search batches for a static GitHub Pages snapshot. It performs no searches until a batch is invoked or a request arrives. No API key is required. It queries public search indexes; it does not retrieve Reddit comment threads or claim to supply verified reviews.
+This Python component collects configured public HTML place listings with Scrapling and runs explicit search batches for a static GitHub Pages snapshot. Nothing is collected until a command is invoked or an optional HTTP request arrives. No API key is required. It does not retrieve Reddit comment threads or claim to supply verified reviews.
+
+## Scrapling place collection
+
+The pinned `scrapling==0.5` dependency provides its parser engine. Ordinary HTTP fetching, robot-rule checks, response-size limits, and deadlines are handled by `scrape_places.py`, then Scrapling's `Selector` extracts the configured listing fields. This does not install or invoke browser fetchers, stealth features, proxy rotation, or challenge solvers.
+
+From the repository root, after installing `search-service/requirements.txt` into a virtual environment:
+
+```text
+python search-service/scrape_places.py --sources data/scrapling-sources.json --destinations data/india-destinations.json --output .local/scraped-places.json
+npm run data:refresh -- --destinations none --scraped .local/scraped-places.json
+```
+
+The manifest specifies source URLs, destinations, and CSS extraction rules. Use `--only` with comma-separated source IDs to collect a subset. The output is an intermediate collection file; Node validates and merges it into the published India index, retaining source attribution and dates. Failed sources must not erase earlier observations or make them look newly collected.
+
+GitHub Actions runs this command only on scheduled or manual refreshes, with a five-minute step limit. GitHub Pages serves the resulting JSON and frontend; it hosts no Python process. The scheduled runner uses Python 3.13, and parser imports and CSS/XPath extraction also passed locally on Python 3.14.3. No `scrapling install` command or browser download is needed for this parser-only integration. See [Scrapling's installation guide](https://scrapling.readthedocs.io/en/latest/#installation) and [Selector API](https://scrapling.readthedocs.io/en/latest/api-reference/selector.html).
+
+## Discussion search batches
 
 From this directory, install dependencies in a virtual environment:
 

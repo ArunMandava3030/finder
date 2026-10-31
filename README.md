@@ -32,11 +32,14 @@ Open [http://localhost:4173/finder/](http://localhost:4173/finder/). For a site 
 | --- | --- | --- |
 | OpenStreetMap through Overpass | Named points of interest, categories, coordinates, source links | Mapped coverage varies; shared APIs can be unavailable or rate limited. |
 | Wikivoyage | Destination listings, descriptions, coordinates where available, and source attribution | Community guide descriptions are not individual visitor reviews. |
+| Configured public HTML pages through Scrapling | Place listings extracted using source-specific CSS selectors | Covers only the configured sources; blocked pages and changed markup can prevent collection. |
 | DDGS search indexes | Destination-relevant links to publicly indexed Reddit discussion threads | Results can be empty, blocked, incomplete, or stale. No Reddit comment threads are fetched. |
 | Wikipedia and Wikivoyage browser search | Additional public guide results with original article links | Requires access to Wikimedia APIs when the visitor searches. |
 | Curated field guide | Selected places and attributed destination photos or clearly marked illustrative scenery | Editorial starting points, separate from collected source coverage. |
 
 The scheduled collector combines source records, keeps their URLs and collection dates, and writes `public/data/india-index.json`. It processes destinations serially and bounds upstream requests. The browser reads this published file; GitHub Pages does not run a Python or Express server.
+
+HTML collection uses [Scrapling 0.5](https://pypi.org/project/scrapling/0.5/) to parse pages listed in `data/scrapling-sources.json`. The initial registry covers eight official tourism and district pages for Gokarna, Coorg, Wayanad, Munnar, and Dehradun. A small ordinary HTTP fetcher checks robots rules and bounds request time and response size before passing HTML to Scrapling's `Selector`. This uses the parser-only package: no browser download, browser impersonation, stealth fetcher, proxy rotation, or challenge solving is enabled. Source pages and their attribution remain attached to extracted places. Scrapling extracts configured pages; it does not search or crawl the entire web.
 
 Discussion collection uses Indian-region search and a requested year filter. It checks for destination words and genuine Reddit thread URLs before exporting a neutral label and link. User-written Reddit titles, excerpts, comments, author details, and ratings are discarded. A search engine's freshness filter does not establish a post's publication date, so unknown publication dates remain unknown.
 
@@ -56,7 +59,7 @@ Each run:
 
 1. Installs Node/Python dependencies and runs the unit tests.
 2. Attempts to restore a newer last-published index from this project's fixed Pages URL, with size, schema, date, and link validation. If it cannot, it keeps the repository snapshot.
-3. Prepares destination queries, checks public search indexes, and refreshes OpenStreetMap/Wikivoyage records.
+3. On scheduled or manual runs, prepares destination queries, checks public search indexes, extracts configured HTML listings with Scrapling, and refreshes OpenStreetMap/Wikivoyage records.
 4. Retains previous records when providers fail, keeping their source timestamps and reporting unavailable or stale coverage.
 5. Builds the static site and deploys its artifact to GitHub Pages.
 
@@ -64,7 +67,7 @@ A scheduled refresh is not a guarantee of new places or new discussion links. Th
 
 Upstream collection runs on the six-hour schedule and manual dispatch. Code pushes test and deploy the latest available snapshot without making another round of requests to shared data services.
 
-In the repository, set **Settings → Pages → Build and deployment → Source → GitHub Actions**. No custom GitHub secrets are needed. The workflow sets `VITE_SEARCH_MODE=public` and `VITE_BASE_PATH=/finder/`. The build has a 25-minute limit, and dependency/build/test failures stop deployment. Collection failures allow a valid previous snapshot to remain available.
+In the repository, set **Settings → Pages → Build and deployment → Source → GitHub Actions**. No custom GitHub secrets are needed. The workflow sets `VITE_SEARCH_MODE=public` and `VITE_BASE_PATH=/finder/`. The build has a 30-minute limit, including up to five minutes for HTML collection and fifteen for the place-source refresh. Dependency/build/test failures stop deployment. Collection failures allow a valid previous snapshot to remain available.
 
 The workflow uses official GitHub actions pinned to commit SHAs. The path keeps scripts, styles, images, and the favicon under `/finder/`; update it if the repository name changes. See the [Vite Pages guide](https://vite.dev/guide/static-deploy.html#github-pages).
 
@@ -75,18 +78,23 @@ python -m venv .local/search-venv
 & ./.local/search-venv/Scripts/python.exe -m pip install -r search-service/requirements-dev.txt
 npm run data:queries
 & ./.local/search-venv/Scripts/python.exe search-service/search_batch.py --input .local/discussion-queries.json --output .local/discussion-results.json
-npm run data:refresh -- --evidence .local/discussion-results.json
+& ./.local/search-venv/Scripts/python.exe search-service/scrape_places.py --sources data/scrapling-sources.json --destinations data/india-destinations.json --output .local/scraped-places.json
+npm run data:refresh -- --evidence .local/discussion-results.json --scraped .local/scraped-places.json
 ```
 
 On macOS/Linux, the virtual environment's executable is `.local/search-venv/bin/python`. To collect only place sources, run `npm run data:refresh`. To limit place collection, use `npm run data:refresh -- --destinations gokarna,hampi`. To merge a validated discussion batch into the existing index without collecting places, pass `--destinations none --evidence .local/discussion-results.json`.
 
-The collector does not use paid search keys, proxies, CAPTCHA workarounds, or automatic retries. Its dependencies and source adapters are based on [deedy5/ddgs](https://github.com/deedy5/ddgs), the [Overpass API](https://github.com/drolbr/Overpass-API), and the [MediaWiki API](https://www.mediawiki.org/wiki/API:Main_page). DDGS is an unofficial search-index client and depends on upstream availability. The [search component README](search-service/README.md) documents its bounded batch contract and optional local HTTP interface.
+For just the configured HTML sources, run the Scrapling command above and then `npm run data:refresh -- --destinations none --scraped .local/scraped-places.json`. Its `--only` option accepts comma-separated source IDs from the manifest. Scheduled jobs merge a collector output only when the file exists; provider failures keep earlier data with its original dates. The scheduled environment uses Python 3.13, and the parser integration has also been checked on Python 3.14.
+
+The collector does not use paid search keys, proxy rotation, CAPTCHA workarounds, or automatic retries. Its dependencies and source adapters are based on [D4Vinci/Scrapling](https://github.com/D4Vinci/Scrapling), [deedy5/ddgs](https://github.com/deedy5/ddgs), the [Overpass API](https://github.com/drolbr/Overpass-API), and the [MediaWiki API](https://www.mediawiki.org/wiki/API:Main_page). DDGS is an unofficial search-index client and depends on upstream availability. The [search component README](search-service/README.md) documents its bounded collectors and optional local HTTP interface.
 
 ## Sources and attribution
 
 OpenStreetMap data is attributed to OpenStreetMap contributors and available under the [Open Database License](https://www.openstreetmap.org/copyright). Preserve attribution and applicable database share-alike obligations when redistributing it.
 
 Wikivoyage text comes from its contributors under [CC BY-SA 4.0](https://en.wikivoyage.org/wiki/Wikivoyage:Copyleft). Source article links identify the original context and provide access to contributor histories; collected excerpts carry source and license references. Additional Wikipedia excerpts follow the applicable [Wikimedia reuse terms](https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use#7._Licensing_of_Content). Retain article attribution and applicable license notices when reusing or adapting source text.
+
+Official tourism pages contribute factual place names and source links. Their prose, photographs, ratings, and reviews are not copied; their own terms continue to apply. The generated description directs visitors to the original publisher. Listing publication dates and access conditions remain unknown unless the source explicitly supplies them.
 
 Destination photographs have their own source and license credits in place details. Other scenery is identified as illustrative. Source text, data, and image licenses apply to those materials, not automatically to unrelated project code.
 

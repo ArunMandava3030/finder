@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "id": "gokarna-mirjan",
+      "destinationId": "gokarna",
+      "url": "https://karnatakatourism.org/en/attractions/mirjan-fort/",
+      "publisher": "Karnataka Tourism, Government of Karnataka",
+      "parser": "detail",
+      "nameSelector": "h1",
+      "scope": "destination",
+      "maxPlaces": 60
+    },
+    {
+      "id": "gokarna-yana",
+      "destinationId": "gokarna",
+      "url": "https://karnatakatourism.org/en/attractions/yana/",
+      "publisher": "Karnataka Tourism, Government of Karnataka",
+      "parser": "detail",
+      "nameSelector": "h1",
+      "scope": "destination",
+      "maxPlaces": 60
+    },
+    {
+      "id": "coorg-district",
+      "destinationId": "coorg",
+      "url": "https://kodagu.nic.in/en/tourism/tourist-places/",
+      "publisher": "Kodagu District Administration, Government of Karnataka",
+      "parser": "listing",
+      "itemSelector": "h2 a.txtHeading",
+      "linkSelector": "::attr(href)",
+      "scope": "destination",
+      "allowedPaths": [
+        "/en/tourist-place/nagaraholle-national-park/",
+        "/en/tourist-place/harangi-tree-park-and-elephant-camp/",
+        "/en/tourist-place/mandalpatti/",
+        "/en/tourist-place/glenlorna-tea-plantation/",
+        "/en/tourist-place/omkareshwara-temple/",
+        "/en/tourist-place/bhagamandala/",
+        "/en/tourist-place/rajas-seat/",
+        "/en/tourist-place/talacauvery/"
+      ],
+      "maxPlaces": 60
+    },
+    {
+      "id": "coorg-district-page2",
+      "destinationId": "coorg",
+      "url": "https://kodagu.nic.in/en/tourism/tourist-places/page/2/",
+      "publisher": "Kodagu District Administration, Government of Karnataka",
+      "parser": "listing",
+      "itemSelector": "h2 a.txtHeading",
+      "linkSelector": "::attr(href)",
+      "scope": "destination",
+      "maxPlaces": 60
+    },
+    {
+      "id": "wayanad-district",
+      "destinationId": "wayanad",
+      "url": "https://wayanad.gov.in/en/tourist-places/",
+      "publisher": "Wayanad District Administration, Government of Kerala",
+      "parser": "listing",
+      "itemSelector": "h2 a.txtHeading",
+      "linkSelector": "::attr(href)",
+      "scope": "destination",
+      "maxPlaces": 60
+    },
+    {
+      "id": "wayanad-dtpc",
+      "destinationId": "wayanad",
+      "url": "https://www.dtpcwayanad.com/destination/places-of-interest",
+      "publisher": "District Tourism Promotion Council, Wayanad",
+      "parser": "listing",
+      "itemSelector": "#destination-list-view a",
+      "nameSelector": "h3",
+      "linkSelector": "::attr(href)",
+      "scope": "destination",
+      "maxPlaces": 60
+    },
+    {
+      "id": "munnar-dtpc",
+      "destinationId": "munnar",
+      "url": "https://www.dtpcidukki.com/tourism-centres",
+      "publisher": "District Tourism Promotion Council, Idukki",
+      "parser": "listing",
+      "itemSelector": ".content-section h3",
+      "scope": "selected_places",
+      "allowedNames": [
+        "Sreenarayanapuram Tourism Centre",
+        "Munnar Tourism Information Office and Children's Park",
+        "Mattupetty Boating Centre",
+        "Botanical Garden"
+      ],
+      "maxPlaces": 60
+    },
+    {
+      "id": "dehradun-municipal",
+      "destinationId": "dehradun",
+      "url": "https://nndehradun.uk.gov.in/places-to-visit/",
+      "publisher": "Nagar Nigam Dehradun, Government of Uttarakhand",
+      "parser": "listing",
+      "itemSelector": ".awardContent",
+      "nameSelector": "h2",
+      "linkSelector": "a.arrowDetails",
+      "scope": "destination",
+      "allowedPaths": [
+        "/places-centres/tapkeshwar-temple/",
+        "/places-centres/malsi-deer-park/",
+        "/places-centres/guchhupani/",
+        "/places-centres/santala-devi-temple/",
+        "/places-centres/sahastradhara/"
+      ],
+      "maxPlaces": 60
+    }
+  ]
+}
