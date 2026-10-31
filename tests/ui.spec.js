@@ -28,7 +28,7 @@ async function searchFor(page, query) {
 test('the starter guide supports categories, destinations, and list layout', async ({ page }) => {
   await mockSearch(page);
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: 'A little off the beaten path.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Find places with fewer crowds.', exact: true })).toBeVisible();
   await expect(page.locator('.place-card')).toHaveCount(6);
   await page.getByRole('button', { name: 'Beaches', exact: true }).click();
   await expect(page.locator('.place-card')).toHaveCount(4);
@@ -201,7 +201,7 @@ test('returning to Discover cancels a pending search and ignores its late respon
   await page.getByRole('button', { name: 'Discover', exact: true }).click();
   releaseResponse();
   await Promise.all([handled, cancelled]);
-  await expect(page.getByRole('heading', { name: 'A little off the beaten path.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Find places with fewer crowds.', exact: true })).toBeVisible();
   await expect(page.locator('.place-card')).toHaveCount(6);
   await expect(page.locator('.web-result')).toHaveCount(0);
   await expect(page.getByText('Stale provider warning', { exact: true })).toHaveCount(0);

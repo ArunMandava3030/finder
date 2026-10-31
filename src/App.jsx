@@ -207,7 +207,7 @@ function PlaceCard({ place, saved, onSave, onOpen, index }) {
         </button>
         <span className="category-label">
           {place.featured ? <Sparkles size={12} /> : <MapPin size={12} />}
-          {place.featured ? "Worth the detour" : place.category}
+          {place.featured ? "Field guide" : place.category}
         </span>
         <button
           className={`save-button ${saved ? "is-saved" : ""}`}
@@ -524,9 +524,9 @@ export default function App() {
               <span className="heading-star">✳</span>
             </h1>
             <p>
-              Hidden corners. Local favourites. Worthwhile detours.
+              Find places with fewer crowds.
               <br className="desktop-break" /> All the good stuff, brought
-              together from public travel guides.
+              together with source evidence and dates.
             </p>
           </div>
           <div className="hero-location">
@@ -626,15 +626,15 @@ export default function App() {
                 {savedView
                   ? "For your someday list."
                   : query
-                    ? `A different side of ${normalizeLocalQuery(query) || "somewhere"}.`
-                    : "A little off the beaten path."}
+                    ? "Quieter places to explore."
+                    : "Find places with fewer crowds."}
               </h2>
               <p>
                 {savedView
                   ? "The places you’ve bookmarked, ready when you are."
                   : query
                     ? `Following the trail for “${query}”`
-                    : "For the places you won’t find on every itinerary."}
+                    : "Start with what sources actually say about visitor numbers."}
               </p>
             </div>
             <span className="field-note">
@@ -643,6 +643,9 @@ export default function App() {
           </div>
 
           {!savedView && <IndiaDiscovery query={query} />}
+
+          <details className="general-guides" key={`${query}:${savedView}`} open={savedView || !PUBLIC_SEARCH ? true : undefined}>
+          {!savedView && <><summary>General travel guides — crowd levels unverified</summary><p className="general-guides-note">These guides include popular attractions and editorial selections. They are background information; quieter suggestions appear above.</p></>}
 
           {(query || savedView) && (
             <div className="result-tabs">
@@ -988,6 +991,7 @@ export default function App() {
               )}
             </div>
           )}
+          </details>
         </section>
 
         <section className="bottom-banner">
@@ -1217,7 +1221,7 @@ export default function App() {
                 <h3>Follow real sources</h3>
                 <p>
                   {PUBLIC_SEARCH
-                    ? "Explore the periodically collected India index for named places, mapped locations, source dates, and community travel advice. Every place explains why it appears. You can also search Wikipedia and Wikivoyage directly."
+                    ? "Start with places whose sources explicitly report fewer visitors. Each result shows the claim, its date, and uncertainty. General travel guides are available separately when you want wider context."
                     : "Browse our sourced field guide or use live search for travel pages and publicly indexed Reddit and Instagram posts. Every result links back to its source."}
                 </p>
               </div>
@@ -1266,7 +1270,7 @@ export default function App() {
             </p>
             <p>
               {PUBLIC_SEARCH
-                ? "The India index combines community travel listings and available OpenStreetMap data. Refreshes are scheduled every six hours, with source dates and collection gaps shown. Traveller discussions link to their original threads; we do not import social comments or ratings. You can also search Wikipedia and Wikivoyage directly without an API key."
+                ? "The India index combines tourism listings, explicit crowd comparisons, community guides, and available OpenStreetMap data. Quieter recommendations require visitor-related evidence. Refreshes are scheduled every six hours, with publication dates and collection gaps shown. These reports are not live headcounts. Traveller discussions open their original threads."
                 : "Live search uses a configured search provider. It can surface public travel pages and indexed social conversations, but cannot cover every page or private post."}
             </p>
             <p>

@@ -14,6 +14,21 @@ HTML = b'''<html><nav><h3>Newsletter</h3></nav><main>
 <article class="place"><h3>Unrelated place</h3><a href="https://other.example.org/places/a/">Elsewhere</a></article>
 <article class="place"><h3>Contact us</h3><a href="/contact/">Contact</a></article>
 </main></html>'''
+CROWD_SOURCE = {'id': 'gokarna-crowd-guide', 'destinationId': 'gokarna', 'url': 'https://karnatakatourism.org/en/blogs/gokarna-beaches/', 'publisher': 'Karnataka Tourism, Government of Karnataka', 'parser': 'crowd_table', 'scope': 'destination', 'maxPlaces': 12}
+GOKARNA = {'id': 'gokarna', 'city': 'Gokarna', 'state': 'Karnataka', 'bbox': [14.3, 74.15, 14.85, 74.7]}
+CROWD_HTML = b'''<main><div>June 2026</div><h1>Gokarna Beaches</h1>
+<table><tr><td>Quick Facts</td><td>Information</td></tr><tr><td>Access</td><td>Low</td></tr></table>
+<table><tbody><tr><td><strong>Beach</strong></td><td>Access</td><td>Best For</td><td><strong>Crowd Level</strong></td><td>Facilities</td></tr>
+<tr><td>Gokarna Main Beach</td><td>Road / Walk</td><td>Activities</td><td>High</td><td>Facilities</td></tr>
+<tr><td>Gokarna Kudle Beach</td><td>Walk / Auto</td><td>Activities</td><td>Moderate</td><td>Facilities</td></tr>
+<tr><td>Gokarna Om Beach</td><td>Road / Trek</td><td>Activities</td><td>High</td><td>Facilities</td></tr>
+<tr><td>Paradise Beach</td><td>Trek / Boat</td><td>Activities</td><td>Low</td><td>Facilities</td></tr>
+<tr><td>God's Own Beach</td><td>Trek</td><td>Activities</td><td>Very Low</td><td>Facilities</td></tr>
+<tr><td>Half-Moon Beach</td><td>Trek / Boat</td><td>Activities</td><td>Low</td><td>Facilities</td></tr>
+<tr><td>Belekan Beach</td><td>Road / Boat</td><td>Activities</td><td></td><td>Very Low</td></tr>
+<tr><td>Nirvana Beach</td><td>Ferry / Road</td><td>Activities</td><td>Very Low</td><td>Facilities</td></tr>
+<tr><td>Small Hell Beach</td><td>Trek</td><td>Activities</td><td>Very Low</td><td>Facilities</td></tr>
+</tbody></table></main><footer>Last reviewed and Updated on: 22 October 2026</footer>'''
 
 
 class ScrapePlacesTests(unittest.TestCase):
@@ -124,6 +139,66 @@ class ScrapePlacesTests(unittest.TestCase):
                 fetch_document(SOURCE['url'])
         response.read1.assert_called_once()
         response.read.assert_not_called()
+
+    def test_crowd_table_extracts_eight_named_claims_and_skips_shifted_belekan_cell(self):
+        places = extract_places(CROWD_HTML, CROWD_SOURCE, GOKARNA, FETCHED)
+        self.assertEqual(len(places), 8)
+        evidence = {place['name']: place['crowdEvidence'][0] for place in places}
+        self.assertNotIn('Belekan Beach', evidence)
+        self.assertEqual(evidence['Gokarna Main Beach']['direction'], 'busy')
+        self.assertEqual(evidence['Om Beach']['level'], 'high')
+        self.assertEqual(evidence['Kudle Beach']['direction'], 'mixed')
+        self.assertEqual(evidence['Paradise Beach']['level'], 'low')
+        self.assertEqual(evidence['Half Moon Beach']['direction'], 'quieter')
+        self.assertEqual(evidence['Nirvana Beach']['level'], 'very_low')
+        for place in places:
+            claim = place['crowdEvidence'][0]
+            self.assertEqual(claim['publishedPeriod'], '2026-06')
+            self.assertIsNone(claim['sourceUpdatedAt'])
+            self.assertEqual(claim['retrievedAt'], FETCHED)
+            self.assertEqual(claim['url'], CROWD_SOURCE['url'])
+            self.assertEqual(claim['sourceType'], 'official')
+            self.assertEqual(claim['provider'], 'scrapling')
+            self.assertEqual(claim['sourceId'], CROWD_SOURCE['id'])
+            self.assertFalse(claim['conditional'])
+            self.assertIn('not a live headcount', claim['context'])
+            self.assertEqual(place['sources'][0]['excerpt'], '')
+            self.assertIsNone(place['coordinates'])
+        self.assertEqual(evidence['Nirvana Beach']['claim'], 'The tourism guide classifies Nirvana Beach crowd levels as very low.')
+
+    def test_crowd_table_maps_headers_not_positions_and_never_infers_missing_values(self):
+        reordered = b'<table><tr><th>Crowd Level</th><th>Facilities</th><th>Beach</th></tr><tr><td>Low</td><td>High</td><td>Paradise Beach</td></tr></table>'
+        places = extract_places(reordered, CROWD_SOURCE, GOKARNA, FETCHED)
+        self.assertEqual(len(places), 1)
+        self.assertEqual(places[0]['crowdEvidence'][0]['level'], 'low')
+        self.assertIsNone(places[0]['crowdEvidence'][0]['publishedPeriod'])
+        for invalid in [
+            reordered.replace(b'Crowd Level', b'Popularity'),
+            reordered.replace(b'<td>Low</td>', b'<td></td>'),
+            reordered.replace(b'<td>Low</td>', b'<td>Low on weekdays</td>'),
+            reordered.replace(b'<td>Low</td>', b''),
+            reordered.replace(b'<td>Low</td>', b'<td colspan="2">Low</td>'),
+            b'<main><h1>Quiet beaches</h1><p>Paradise Beach has low crowds.</p></main>',
+        ]:
+            with self.subTest(html=invalid):
+                self.assertEqual(extract_places(invalid, CROWD_SOURCE, GOKARNA, FETCHED), [])
+
+    def test_crowd_publication_month_is_not_taken_from_footer_or_invented_as_update(self):
+        body = CROWD_HTML.replace(b'<div>June 2026</div>', b'')
+        body += b'<footer><div>October 2026</div></footer>'
+        for place in extract_places(body, CROWD_SOURCE, GOKARNA, FETCHED):
+            self.assertIsNone(place['crowdEvidence'][0]['publishedPeriod'])
+            self.assertIsNone(place['crowdEvidence'][0]['sourceUpdatedAt'])
+
+    def test_crowd_parser_accepts_only_explicit_area_and_access_notes_overrides(self):
+        source = {**CROWD_SOURCE, 'placeDetails': {'Nirvana Beach': {'area': 'Kumta coast', 'accessNotes': 'The source lists ferry or road access.'}}}
+        validate_sources({'schemaVersion': 1, 'sources': [source]}, [GOKARNA])
+        places = extract_places(CROWD_HTML, source, GOKARNA, FETCHED)
+        nirvana = next(place for place in places if place['name'] == 'Nirvana Beach')
+        self.assertEqual(nirvana['area'], 'Kumta coast')
+        self.assertEqual(nirvana['accessNotes'], 'The source lists ferry or road access.')
+        with self.assertRaises(ValueError):
+            validate_sources({'schemaVersion': 1, 'sources': [{**source, 'placeDetails': {'Om Beach': {'crowdEvidence': []}}}]}, [GOKARNA])
 
 
 if __name__ == '__main__':

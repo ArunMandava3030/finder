@@ -219,8 +219,107 @@ def jsonld_coordinates(page, name: str, bbox: list) -> dict | None:
     return None
 
 
+def article_published_period(page) -> str | None:
+    """Read a month beside the article heading, never site-wide footer dates."""
+    periods = set()
+    months = {month.casefold(): index for index, month in enumerate((
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December',
+    ), 1)}
+    for node in page.xpath('//h1/preceding-sibling::*[1]')[:5]:
+        match = re.fullmatch(r'([A-Za-z]+)\s+(\d{4})', node_text(node))
+        if not match or match[1].casefold() not in months:
+            continue
+        year, month = int(match[2]), months[match[1].casefold()]
+        current = datetime.now(timezone.utc)
+        if 1900 <= year and (year, month) <= (current.year, current.month):
+            periods.add(f'{year:04d}-{month:02d}')
+    return next(iter(periods)) if len(periods) == 1 else None
+
+
+def crowd_place_name(value: str) -> str:
+    name = re.sub(r'\s+', ' ', value).strip()
+    if name in {'Gokarna Om Beach', 'Gokarna Kudle Beach'}:
+        name = name.removeprefix('Gokarna ')
+    if name == 'Main Beach':
+        name = 'Gokarna Main Beach'
+    return name.replace('Half-Moon Beach', 'Half Moon Beach')
+
+
+def extract_crowd_table(page, source: dict, destination: dict, fetched_at: str) -> list[dict]:
+    levels = {'High': ('high', 'busy'), 'Moderate': ('moderate', 'mixed'), 'Low': ('low', 'quieter'), 'Very Low': ('very_low', 'quieter')}
+    matches = []
+    for table in page.css('table')[:30]:
+        rows = table.css('tr')
+        if len(rows) > 300:
+            raise ValueError('Too many comparison rows; review the source table.')
+        for position, row in enumerate(rows):
+            cells = row.xpath('./th|./td')
+            headers = [node_text(cell) for cell in cells]
+            if headers.count('Beach') == 1 and headers.count('Crowd Level') == 1:
+                if len(headers) > 20 or any(cell.attrib.get('colspan', '1') != '1' or cell.attrib.get('rowspan', '1') != '1' for cell in cells):
+                    continue
+                matches.append((rows[position + 1:], headers))
+                break
+    # Ambiguous competing tables cannot establish a single comparison safely.
+    if len(matches) != 1:
+        return []
+    rows, headers = matches[0]
+    published_period = article_published_period(page)
+    details = {normalized_name(name): fields for name, fields in source.get('placeDetails', {}).items()}
+    places, seen = [], set()
+    for row in rows:
+        cells = row.xpath('./th|./td')
+        if len(cells) != len(headers) or any(cell.attrib.get('colspan', '1') != '1' or cell.attrib.get('rowspan', '1') != '1' for cell in cells):
+            continue
+        fields = dict(zip(headers, (node_text(cell) for cell in cells)))
+        label = fields['Crowd Level']
+        # Never borrow a value from Facilities/Access when the crowd cell is blank.
+        if label not in levels:
+            continue
+        name = crowd_place_name(fields['Beach'])
+        if not 3 <= len(name) <= 160 or len(name.split()) > 20 or re.search(r'https?://|@|[<>]', name) or PRIVATE_ACCESS.search(node_text(row)):
+            continue
+        key = normalized_name(name)
+        if key in seen:
+            continue
+        seen.add(key)
+        level, direction = levels[label]
+        url = source['url']
+        evidence = {
+            'url': url, 'publisher': source['publisher'],
+            'claim': f'The tourism guide classifies {name} crowd levels as {label.lower()}.',
+            'direction': direction, 'level': level, 'sourceUpdatedAt': None,
+            'publishedPeriod': published_period, 'retrievedAt': fetched_at,
+            'conditional': False, 'context': 'General guide comparison; not a live headcount.',
+            'sourceType': 'official', 'provider': 'scrapling', 'sourceId': source['id'],
+        }
+        place = {
+            'id': f"scrapling:{source['id']}:{hashlib.sha256((url + '|' + key).encode()).hexdigest()[:16]}",
+            'name': name, 'city': destination['city'], 'state': destination['state'],
+            'destinationId': destination['id'], 'country': 'India', 'category': 'Beaches',
+            'coordinates': None, 'image': None, 'tags': ['official tourism'],
+            'description': f"Listed by {source['publisher']}. Open the original source for place details and current visitor information.",
+            'crowdEvidence': [evidence],
+            'sources': [{
+                'url': url, 'title': name, 'kind': 'guide', 'publisher': source['publisher'],
+                'provider': 'scrapling', 'sourceId': source['id'], 'catalogUrl': url,
+                'collectionMethod': 'scrapling', 'retrievedAt': fetched_at,
+                'publishedAt': None, 'updatedAt': None, 'excerpt': '',
+                'license': 'Factual metadata; see source terms',
+            }],
+        }
+        place.update(details.get(key, {}))
+        places.append(place)
+    if len(places) > source.get('maxPlaces', MAX_PLACES):
+        raise ValueError('Comparison exceeds the configured place limit.')
+    return places
+
+
 def extract_places(body: bytes, source: dict, destination: dict, fetched_at: str) -> list[dict]:
     page = Selector(body, url=source['url'], encoding='utf-8', huge_tree=False, adaptive=False)
+    if source['parser'] == 'crowd_table':
+        return extract_crowd_table(page, source, destination, fetched_at)
     nodes = page.css(source.get('itemSelector') or ('h1' if source['parser'] == 'detail' else 'main h2 a'))
     if len(nodes) > 300:
         raise ValueError('Too many candidate elements; review the source selectors.')
@@ -288,7 +387,7 @@ def validate_sources(manifest: dict, destinations: list) -> list[dict]:
         if not isinstance(source, dict) or not re.fullmatch(r'[a-z0-9-]{1,80}', source.get('id', '')) or source['id'] in ids:
             raise ValueError('Sources need unique, bounded identifiers.')
         ids.add(source['id'])
-        if source.get('destinationId') not in destination_ids or source.get('parser') not in {'listing', 'detail'} or not public_url(source.get('url')):
+        if source.get('destinationId') not in destination_ids or source.get('parser') not in {'listing', 'detail', 'crowd_table'} or not public_url(source.get('url')):
             raise ValueError('Invalid source destination, URL or parser.')
         if not isinstance(source.get('publisher'), str) or not 2 <= len(source['publisher']) <= 160:
             raise ValueError('Sources need an attributed publisher.')
@@ -302,6 +401,14 @@ def validate_sources(manifest: dict, destinations: list) -> list[dict]:
         for field in ('itemSelector', 'nameSelector', 'linkSelector', 'linkPattern'):
             if field in source and (not isinstance(source[field], str) or len(source[field]) > 500):
                 raise ValueError('Invalid extraction selector.')
+        details = source.get('placeDetails', {})
+        if not isinstance(details, dict) or len(details) > MAX_PLACES:
+            raise ValueError('Invalid place details mapping.')
+        for name, fields in details.items():
+            if not isinstance(name, str) or not 3 <= len(name) <= 160 or not isinstance(fields, dict) or not set(fields).issubset({'area', 'accessNotes'}):
+                raise ValueError('Only verified place area and access notes may be configured.')
+            if any(not isinstance(value, str) or not 1 <= len(value) <= 500 for value in fields.values()):
+                raise ValueError('Invalid place detail text.')
     return sources
 
 

@@ -1,5 +1,14 @@
 import { normalizeLocalQuery } from './discovery.js';
-const queryFillers = new Set(['india', 'in', 'near', 'around', 'the', 'and', 'to', 'of', 'travel', 'places', 'place', 'underrated', 'most', 'find', 'all', 'hidden']);
+const queryFillers = new Set(['india', 'in', 'near', 'around', 'the', 'and', 'to', 'of', 'travel', 'places', 'place', 'underrated', 'most', 'find', 'all', 'hidden', 'quiet', 'quieter', 'least', 'less', 'populated', 'crowded', 'crowds', 'crowd', 'uncrowded', 'peaceful', 'secluded', 'touristy', 'tourists', 'tourist', 'non', 'busy', 'low', 'density', 'spots', 'spot']);
+const crowdOrder = { quieter: 0, mixed: 1, unknown: 2, busy: 3 };
+const crowdLevels = { very_low: 0, low: 1, moderate: 2, high: 3 };
+
+export function compareCrowdEvidence(a, b) {
+  const status = (crowdOrder[a.crowd?.status] ?? 2) - (crowdOrder[b.crowd?.status] ?? 2);
+  return status || (crowdLevels[a.crowd?.level] ?? 4) - (crowdLevels[b.crowd?.level] ?? 4)
+    || Number(b.crowd?.confidence === 'medium') - Number(a.crowd?.confidence === 'medium')
+    || (b.discovery?.score || 0) - (a.discovery?.score || 0) || a.name.localeCompare(b.name);
+}
 
 export function safeSourceUrl(value) {
   try {
@@ -15,7 +24,7 @@ export function validateIndex(data) {
   return {
     ...data,
     places: data.places.filter(place => typeof place.name === 'string' && place.destinationId && Array.isArray(place.sources))
-      .map(place => ({ ...place, sources: place.sources.filter(source => safeSourceUrl(source.url)) })),
+      .map(place => ({ ...place, sources: place.sources.filter(source => safeSourceUrl(source.url)), crowd: place.crowd ? { ...place.crowd, evidence: (place.crowd.evidence || []).filter(item => safeSourceUrl(item.url)) } : { status: 'unknown', evidence: [] } })),
     discussions: (data.discussions || []).filter(item => safeSourceUrl(item.url)),
   };
 }
@@ -27,7 +36,7 @@ export function destinationsForQuery(destinations, query) {
     .some(alias => text.includes(` ${normalizeLocalQuery(alias)} `)));
 }
 
-export function selectIndexPlaces(data, { query = '', destinationId = '', category = 'all', offbeatOnly = false } = {}) {
+export function selectIndexPlaces(data, { query = '', destinationId = '', category = 'all', crowdMode = 'quieter', offbeatOnly = false } = {}) {
   const matched = destinationsForQuery(data.destinations, query);
   const ids = new Set(matched.map(destination => destination.id));
   // A city search can contain a specific place name: don't silently ignore those words.
@@ -41,9 +50,10 @@ export function selectIndexPlaces(data, { query = '', destinationId = '', catego
   return data.places.filter(place => ids.has(place.destinationId)
     && (!destinationId || place.destinationId === destinationId)
     && (category === 'all' || place.category === category)
+    && (crowdMode === 'all' || place.crowd?.status === crowdMode)
     && (!offbeatOnly || place.discovery?.label === 'Offbeat signal found')
-    && words.every(word => `${place.name} ${place.description} ${(place.tags || []).join(' ')} ${place.category}`.toLowerCase().includes(word)))
-    .sort((a, b) => (b.discovery?.score || 0) - (a.discovery?.score || 0) || a.name.localeCompare(b.name));
+    && words.every(word => `${place.name} ${(place.aliases || []).join(' ')} ${place.description} ${(place.tags || []).join(' ')} ${place.category}`.toLowerCase().includes(word)))
+    .sort(compareCrowdEvidence);
 }
 
 export function formatSourceDate(value) {

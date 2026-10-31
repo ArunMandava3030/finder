@@ -10,6 +10,7 @@ const MAX_BATCH_BYTES = 8 * 1024 * 1024;
 const LICENSE = 'Factual metadata; see source terms';
 const statuses = new Set(['ok', 'empty', 'unavailable', 'blocked']);
 const categories = new Set(['Beaches', 'Nature', 'Trails', 'Culture', 'Attractions']);
+const crowdDirections = { very_low: 'quieter', low: 'quieter', moderate: 'mixed', high: 'busy' };
 const socialHosts = ['reddit.com', 'instagram.com', 'facebook.com', 'twitter.com', 'x.com', 'tiktok.com', 'youtube.com', 'tripadvisor.com', 'quora.com'];
 const failure = message => Object.assign(new Error(message), { code: 'INVALID_SCRAPLING_BATCH' });
 const hash = value => createHash('sha256').update(value).digest('hex').slice(0, 16);
@@ -52,6 +53,7 @@ function registrySources(registry, destinationList) {
     if (entry.allowedNames !== undefined && (!Array.isArray(entry.allowedNames) || !entry.allowedNames.length || entry.allowedNames.length > MAX_PLACES_PER_SOURCE || entry.allowedNames.some(name => typeof name !== 'string' || !name.trim()))) throw failure('The Scrapling source registry contains invalid allowed names.');
     if (entry.scope === 'selected_places' && !entry.allowedNames?.length) throw failure('A narrowly scoped Scrapling source requires allowed names.');
     if (entry.allowedPaths !== undefined && (!Array.isArray(entry.allowedPaths) || !entry.allowedPaths.length || entry.allowedPaths.length > MAX_PLACES_PER_SOURCE || entry.allowedPaths.some(value => typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || /[?#]/.test(value)))) throw failure('The Scrapling source registry contains invalid allowed paths.');
+    if (entry.placeDetails !== undefined && (!entry.placeDetails || typeof entry.placeDetails !== 'object' || Array.isArray(entry.placeDetails) || Object.keys(entry.placeDetails).length > MAX_PLACES_PER_SOURCE || Object.entries(entry.placeDetails).some(([name, details]) => !name.trim() || !details || typeof details !== 'object' || Array.isArray(details) || Object.entries(details).some(([key, value]) => !['area', 'accessNotes'].includes(key) || typeof value !== 'string' || !value.trim() || value.length > 500)))) throw failure('The Scrapling source registry contains invalid place details.');
     result.set(entry.id, { ...entry, url: url.href, publisher: text(entry.publisher, 120), destination, allowedOrigins, maxPlaces: Math.max(1, Math.min(Number(entry.maxPlaces) || 60, MAX_PLACES_PER_SOURCE)) });
   }
   return result;
@@ -86,10 +88,30 @@ function normalizePlace(input, source, fetchedAt) {
     });
   }
   const identity = `${normalizedName(name)}\n${sources[0].url}`;
+  let crowdEvidence;
+  if (source.parser === 'crowd_table') {
+    if (!Array.isArray(input.crowdEvidence) || input.crowdEvidence.length !== 1 || sources.some(item => item.url !== source.url)) return null;
+    const candidate = input.crowdEvidence[0];
+    if (!candidate || !Object.hasOwn(crowdDirections, candidate.level) || candidate.direction !== crowdDirections[candidate.level] || candidate.provider !== 'scrapling' || candidate.sourceId !== source.id || candidate.publisher !== source.publisher || safeUrl(candidate.url)?.href !== source.url || candidate.sourceType !== 'official' || candidate.sourceUpdatedAt != null || candidate.conditional !== false) return null;
+    const publishedPeriod = candidate.publishedPeriod ?? null;
+    if (publishedPeriod !== null && (typeof publishedPeriod !== 'string' || !/^\d{4}-(?:0[1-9]|1[0-2])$/.test(publishedPeriod) || publishedPeriod > fetchedAt.slice(0, 7))) return null;
+    crowdEvidence = [{
+      url: source.url, publisher: source.publisher,
+      claim: `The tourism guide classifies ${name} crowd levels as ${candidate.level.replace('_', ' ')}.`,
+      direction: crowdDirections[candidate.level], level: candidate.level, sourceUpdatedAt: null, publishedPeriod,
+      retrievedAt: fetchedAt, conditional: false, context: 'General guide comparison; not a live headcount.',
+      sourceType: 'official', provider: 'scrapling', sourceId: source.id,
+    }];
+  } else if (input.crowdEvidence !== undefined && (!Array.isArray(input.crowdEvidence) || input.crowdEvidence.length)) return null;
+  const details = Object.entries(source.placeDetails || {}).find(([key]) => normalizedName(key) === normalizedName(name))?.[1];
   return {
     id: `scrapling:${source.id}:${hash(identity)}`, name, city: destination.city, destinationId: destination.id,
     state: destination.state, country: 'India', category: categories.has(input.category) ? input.category : 'Attractions',
     coordinates, description: factualDescription(source.publisher), tags: [], image: null,
+    ...(crowdEvidence ? { crowdEvidence } : {}),
+    ...(details?.area ? { area: text(details.area, 500) } : {}),
+    ...(details?.accessNotes ? { accessNotes: text(details.accessNotes, 500) } : {}),
+    ...(details?.area || details?.accessNotes ? { detailsSourceId: source.id } : {}),
     sources: [...new Map(sources.map(item => [item.url, item])).values()],
   };
 }
@@ -147,11 +169,18 @@ function isOwnedSource(source, sourceId) {
 
 function dropOwnedSources(place, sourceId) {
   const sources = (place.sources || []).filter(source => !isOwnedSource(source, sourceId));
-  if (sources.length === (place.sources || []).length) return place;
+  const crowdEvidence = (place.crowdEvidence || []).filter(item => !(item.provider === 'scrapling' && item.sourceId === sourceId));
+  if (sources.length === (place.sources || []).length && crowdEvidence.length === (place.crowdEvidence || []).length) return place;
   if (!sources.length) return null;
+  const retained = { ...place };
+  if (place.detailsSourceId === sourceId) {
+    delete retained.area;
+    delete retained.accessNotes;
+    delete retained.detailsSourceId;
+  }
   const id = place.id?.startsWith(`scrapling:${sourceId}:`) ? `retained:${hash(`${place.destinationId}\n${place.name}\n${sources.map(source => source.url).join('\n')}`)}` : place.id;
   const scraperSource = sources.find(source => source.provider === 'scrapling');
-  return { ...place, id, sources, description: sources.find(source => source.kind === 'guide' && source.excerpt)?.excerpt || sources.find(source => source.excerpt)?.excerpt || (scraperSource ? factualDescription(scraperSource.publisher) : '') };
+  return { ...retained, id, sources, ...(place.crowdEvidence ? { crowdEvidence } : {}), description: sources.find(source => source.kind === 'guide' && source.excerpt)?.excerpt || sources.find(source => source.excerpt)?.excerpt || (scraperSource ? factualDescription(scraperSource.publisher) : '') };
 }
 
 /** Apply a validated batch. Failures and extraction-empty pages retain old source dates. */

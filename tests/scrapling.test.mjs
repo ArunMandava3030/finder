@@ -276,3 +276,69 @@ test('offline --scraped integration publishes merged coverage and leaves the old
     await assert.rejects(readScraplingBatch(batchFile, { registry }), { code: 'INVALID_SCRAPLING_BATCH' });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+const crowdRegistry = { schemaVersion: 1, sources: [{ ...registry.sources[0], parser: 'crowd_table', placeDetails: { 'Quiet Cove': { area: 'Northern coast', accessNotes: 'Use the permitted walking route.' } } }] };
+
+function crowdPlace(level = 'very_low', overrides = {}) {
+  const entry = crowdRegistry.sources[0];
+  const place = scrapedPlace();
+  place.sources[0].url = entry.url;
+  place.sources[0].catalogUrl = entry.url;
+  place.crowdEvidence = [{ url: entry.url, publisher: entry.publisher, claim: 'UNTRUSTED PARAPHRASE', direction: level === 'high' ? 'busy' : level === 'moderate' ? 'mixed' : 'quieter', level, sourceUpdatedAt: null, publishedPeriod: '2026-06', retrievedAt: CURRENT, conditional: false, context: 'UNTRUSTED CONTEXT', sourceType: 'official', provider: 'scrapling', sourceId: entry.id, ...overrides }];
+  place.area = 'UNTRUSTED AREA';
+  place.accessNotes = 'UNTRUSTED ACCESS';
+  return place;
+}
+
+const normalizedCrowdBatch = (places, sourceOverrides = {}, options = {}) => normalizeScraplingBatch(batch([batchSource('tourism-gokarna', { places, ...sourceOverrides })]), { registry: crowdRegistry, destinations: [destination], now: () => Date.parse(CURRENT), ...options });
+
+test('crowd-table ingestion reconstructs supported claims, preserves month precision and uses only registry access details', () => {
+  const result = normalizedCrowdBatch([crowdPlace()]);
+  assert.equal(result.sources[0].status, 'ok');
+  const place = result.sources[0].places[0];
+  assert.equal(place.crowdEvidence[0].claim, 'The tourism guide classifies Quiet Cove crowd levels as very low.');
+  assert.equal(place.crowdEvidence[0].publishedPeriod, '2026-06');
+  assert.equal(place.crowdEvidence[0].sourceUpdatedAt, null);
+  assert.equal(place.crowdEvidence[0].retrievedAt, CURRENT);
+  assert.equal(place.area, 'Northern coast');
+  assert.equal(place.accessNotes, 'Use the permitted walking route.');
+  assert.doesNotMatch(JSON.stringify(place), /UNTRUSTED/);
+  const ranked = mergeScraplingBatch([wikiPlace()], result).places[0];
+  assert.equal(ranked.crowd.status, 'quieter');
+  assert.equal(ranked.crowd.level, 'very_low');
+  assert.equal(ranked.area, 'Northern coast');
+  assert.equal(ranked.accessNotes, 'Use the permitted walking route.');
+  assert.equal(ranked.sources.length, 2);
+});
+
+test('crowd-table records reject unsupported directions, foreign provenance and invalid publication precision', () => {
+  for (const overrides of [{ direction: 'busy' }, { level: 'empty' }, { sourceId: 'not-this-source' }, { publisher: 'Unapproved publisher' }, { url: 'https://another.example.org/' }, { sourceUpdatedAt: CURRENT }, { publishedPeriod: '2026-06-01' }, { publishedPeriod: '2999-01' }, { sourceType: 'firsthand' }, { conditional: true }]) {
+    assert.equal(normalizedCrowdBatch([crowdPlace('very_low', overrides)]).sources[0].status, 'unavailable');
+  }
+  assert.equal(normalize(batch([batchSource('tourism-gokarna', { places: [crowdPlace()] })])).sources[0].status, 'unavailable');
+});
+
+test('successful crowd-table updates remove earlier owned claims while blocked updates retain their original dates', async () => {
+  const initial = mergeScraplingBatch([wikiPlace()], normalizedCrowdBatch([crowdPlace()]));
+  const blocked = normalizedCrowdBatch([], { status: 'blocked', fetchedAt: null, attemptedAt: CURRENT });
+  const retained = mergeScraplingBatch(initial.places, blocked, { previousScraping: initial.scraping });
+  assert.equal(retained.places[0].crowdEvidence[0].level, 'very_low');
+  assert.equal(retained.places[0].crowdEvidence[0].retrievedAt, CURRENT);
+  const refreshed = mergeScraplingBatch(initial.places, normalizedCrowdBatch([crowdPlace('high')]), { previousScraping: initial.scraping });
+  assert.equal(refreshed.places[0].crowdEvidence.length, 1);
+  assert.equal(refreshed.places[0].crowdEvidence[0].level, 'high');
+  assert.equal(refreshed.places[0].crowd.status, 'busy');
+  const registryWithoutCrowds = { schemaVersion: 1, sources: [{ ...crowdRegistry.sources[0], parser: 'listing', placeDetails: {} }] };
+  const ordinary = normalizeScraplingBatch(batch(), { registry: registryWithoutCrowds, destinations: [destination], now: () => Date.parse(CURRENT) });
+  const removed = mergeScraplingBatch(initial.places, ordinary, { previousScraping: initial.scraping });
+  assert.deepEqual(removed.places[0].crowdEvidence, []);
+  assert.equal(removed.places[0].crowd.status, 'unknown');
+  assert.equal(removed.places[0].accessNotes, undefined);
+  const previous = { destination, fetchedAt: CURRENT, places: initial.places, providers: initial.destinationProviders, warnings: [] };
+  const engine = createDiscoveryEngine({ store: { get: async () => previous, put: async () => {} }, wikiProvider: async () => ({ places: [wikiPlace()], warnings: [], status: 'ok', fetchedAt: CURRENT }), osmProvider: async () => ({ places: [], warnings: [], status: 'ok', fetchedAt: CURRENT }), env: {} });
+  const afterApi = await engine.discover('Gokarna', { refresh: true });
+  assert.equal(afterApi.places[0].crowdEvidence.length, 1);
+  assert.equal(afterApi.places[0].crowdEvidence[0].publishedPeriod, '2026-06');
+  assert.equal(afterApi.places[0].crowd.status, 'quieter');
+  assert.equal(afterApi.places[0].accessNotes, 'Use the permitted walking route.');
+});

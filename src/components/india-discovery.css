@@ -20,6 +20,11 @@
 .india-place-actions > span { padding: 5px 8px; background: #edf1e8; border-radius: 4px; }
 .india-place-actions a { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .india-place details ul { padding-left: 18px; font-size: 12px; line-height: 1.7; }
+.india-crowd-evidence { padding: 12px; margin-bottom: 14px; border-left: 3px solid #54715a; background: #f3f5ef; font-size: 12px; line-height: 1.65; }
+.india-crowd-evidence p { margin: 7px 0; }
+.india-crowd-evidence small { display: block; color: #60685f; margin-top: 6px; }
+.general-guides > summary { cursor: pointer; padding: 18px 0; font-size: 15px; }
+.general-guides-note { color: #60685f; font-size: 13px; line-height: 1.65; margin-bottom: 20px; }
 .india-source { margin-top: 14px; font-size: 12px; line-height: 1.6; }
 .india-source small { display: block; margin-top: 4px; color: #6a7569; }
 .india-more { margin: 10px 0 20px; }

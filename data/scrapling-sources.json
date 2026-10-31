@@ -2,6 +2,25 @@
   "schemaVersion": 1,
   "sources": [
     {
+      "id": "gokarna-crowd-guide",
+      "destinationId": "gokarna",
+      "url": "https://karnatakatourism.org/en/blogs/gokarna-beaches/",
+      "publisher": "Karnataka Tourism, Government of Karnataka",
+      "parser": "crowd_table",
+      "scope": "destination",
+      "placeDetails": {
+        "Gokarna Main Beach": { "accessNotes": "Access listed: Road / Walk." },
+        "Kudle Beach": { "accessNotes": "Access listed: Walk / Auto." },
+        "Om Beach": { "accessNotes": "Access listed: Road / Trek." },
+        "Paradise Beach": { "accessNotes": "Access listed: Trek / Boat." },
+        "God's Own Beach": { "accessNotes": "Access listed: Trek. Approach crosses plantations; confirm a permitted route locally." },
+        "Half Moon Beach": { "accessNotes": "Access listed: Trek / Boat." },
+        "Nirvana Beach": { "area": "Near Kumta", "accessNotes": "Access listed: Ferry / Road." },
+        "Small Hell Beach": { "accessNotes": "Access listed: Trek. Rocky approach; check the local route and conditions before descending." }
+      },
+      "maxPlaces": 12
+    },
+    {
       "id": "gokarna-mirjan",
       "destinationId": "gokarna",
       "url": "https://karnatakatourism.org/en/attractions/mirjan-fort/",

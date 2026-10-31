@@ -52,8 +52,22 @@ function previousProviderPlaces(previous, provider, refreshedUrls = new Set()) {
     const sources = (place.sources || []).filter(source => sourceProvider(source) === provider && !refreshedUrls.has(pageUrl(source.url)));
     if (!sources.length) return [];
     // A merged record's old description may belong to a different, now replaced source.
-    return [{ ...place, sources, description: sources.find(source => source.excerpt)?.excerpt || '' }];
+    return [{ ...retainedPlaceFields(place, sources), sources, ...(place.crowdEvidence ? { crowdEvidence: retainedCrowdEvidence(place, sources) } : {}), description: sources.find(source => source.excerpt)?.excerpt || '' }];
   });
+}
+
+function retainedCrowdEvidence(place, sources) {
+  return (place.crowdEvidence || []).filter(item => item.provider !== 'scrapling' || sources.some(source => source.provider === 'scrapling' && source.sourceId === item.sourceId));
+}
+
+function retainedPlaceFields(place, sources) {
+  const retained = { ...place };
+  if (place.detailsSourceId && !sources.some(source => source.provider === 'scrapling' && source.sourceId === place.detailsSourceId)) {
+    delete retained.area;
+    delete retained.accessNotes;
+    delete retained.detailsSourceId;
+  }
+  return retained;
 }
 
 async function limitedJson(response) {
@@ -172,7 +186,7 @@ export function createDiscoveryEngine({
         const sources = (place.sources || []).filter(source => !['wikivoyage', 'osm'].includes(sourceProvider(source)));
         const scraperSource = sources.find(source => source.provider === 'scrapling');
         const description = sources.find(source => source.excerpt)?.excerpt || (scraperSource ? `Listed by ${scraperSource.publisher}. Open the original source for place details and current visitor information.` : '');
-        return sources.length ? [{ ...place, sources, description }] : [];
+        return sources.length ? [{ ...retainedPlaceFields(place, sources), sources, description, ...(place.crowdEvidence ? { crowdEvidence: retainedCrowdEvidence(place, sources) } : {}) }] : [];
       });
       places.push(...externalPlaces);
       const apiComplete = providers.every(provider => provider.status === 'ok');

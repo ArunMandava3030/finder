@@ -159,7 +159,7 @@ export const places = [
       "A crescent of sand tucked beyond the headland from Om Beach, with a forest approach and an unhurried coastal feel.",
     image: stock("photo-1519046904884-53103b34b206"),
     imageAlt: "Illustrative stock photograph of a palm-lined tropical beach",
-    tags: ["Beach trek", "Quiet corners", "Sea views"],
+    tags: ["Beach trek", "Coastal scenery", "Sea views"],
     sources: [
       {
         title: "Gokarna beaches",
@@ -209,7 +209,7 @@ export const places = [
     region: "Karnataka",
     category: "Beaches",
     description:
-      "A quiet, rocky shoreline near Tadadi, and a starting point for the coastal walk toward Paradise and Half Moon.",
+      "A rocky shoreline near Tadadi, and a starting point for the coastal walk toward Paradise and Half Moon.",
     image: stock("photo-1518837695005-2083093ee35b"),
     imageAlt:
       "Illustrative stock photograph of sea waves reaching a rocky coast",
@@ -388,7 +388,7 @@ export const places = [
     region: "Rajasthan",
     category: "Nature",
     description:
-      "Find a quieter lakeside landscape outside the city, with a hillside trail opening onto wide views of the water.",
+      "Explore a lakeside landscape outside the city, with a hillside trail opening onto wide views of the water.",
     image: stock("photo-1501785888041-af3ef285b470"),
     imageAlt:
       "Illustrative stock photograph of a still lake surrounded by hills",

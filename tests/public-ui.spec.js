@@ -49,9 +49,15 @@ async function mockWikimedia(page, { empty = false } = {}) {
   return requests;
 }
 
-async function searchFor(page, query) {
+async function openGeneralGuides(page) {
+  const guides = page.locator('.general-guides');
+  if ((await guides.getAttribute('open')) === null) await guides.locator(':scope > summary').click();
+}
+
+async function searchFor(page, query, { general = true } = {}) {
   await page.getByRole('searchbox').fill(query);
   await page.getByRole('searchbox').press('Enter');
+  if (general) await openGeneralGuides(page);
 }
 
 test('the static project subpath loads its scripts, styles, and photographs', async ({ page }) => {
@@ -64,7 +70,9 @@ test('the static project subpath loads its scripts, styles, and photographs', as
     }
   });
   await page.goto('./', { waitUntil: 'networkidle' });
-  await expect(page.getByRole('heading', { name: 'A little off the beaten path.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Find places with fewer crowds.', exact: true })).toBeVisible();
+  await expect(page.locator('.place-card').first()).not.toBeVisible();
+  await openGeneralGuides(page);
   await expect(page.locator('.place-card')).toHaveCount(6);
   await page.locator('img[loading="lazy"]').evaluateAll(images => {
     images.forEach(image => { image.loading = 'eager'; });
@@ -158,8 +166,10 @@ test('external web and social searches encode the query and open safely in a new
 test('saved places persist after reloading the project subpath', async ({ page }) => {
   await mockWikimedia(page);
   await page.goto('./', { waitUntil: 'domcontentloaded' });
+  await openGeneralGuides(page);
   await page.getByRole('button', { name: 'Save Paradise Beach', exact: true }).click();
   await page.reload({ waitUntil: 'domcontentloaded' });
+  await openGeneralGuides(page);
   await expect(page.getByRole('button', { name: 'Unsave Paradise Beach', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: /Saved places/ }).click();
   await expect(page.locator('.place-card')).toHaveCount(1);
@@ -211,12 +221,13 @@ const indexFixture = {
   ],
   discussions: [],
 };
+indexFixture.places[0].crowd = { status: 'quieter', confidence: 'low', reasons: ['A source explicitly reports fewer visitors.'], evidence: [{ url: 'https://en.wikivoyage.org/wiki/Gokarna', publisher: 'Wikivoyage', claim: 'The guide reports few visitors at this cove.', direction: 'quieter', sourceUpdatedAt: '2026-09-01T10:00:00Z', retrievedAt: '2026-10-28T10:00:00Z' }] };
 
 test('the collected index searches real place records and exposes source age and missing reviews', async ({ page }) => {
   await mockWikimedia(page);
   await page.route('**/data/india-index.json', route => route.fulfill({ json: indexFixture }));
   await page.goto('./');
-  const index = page.getByRole('region', { name: 'Explore the India place index' });
+  const index = page.getByRole('region', { name: 'Find quieter places' });
   await expect(index.locator('.india-place')).toHaveCount(1);
   await expect(index.getByText('Test Coastal Cove', { exact: true })).toBeVisible();
   await index.getByText('Sources & why it appears', { exact: true }).click();
@@ -224,6 +235,8 @@ test('the collected index searches real place records and exposes source age and
   await expect(index.getByText(/Visitor ratings are not available/)).toBeVisible();
   await expect(index.getByText(/Discussion search was unavailable/)).toBeVisible();
   await page.getByLabel('Index destination').selectOption('');
+  await expect(index.locator('.india-place')).toHaveCount(1);
+  await page.getByLabel('Crowd evidence').selectOption('all');
   await expect(index.locator('.india-place')).toHaveCount(2);
   await page.getByLabel('Index destination').selectOption('hampi');
   await expect(index.getByText('Test Hampi Temple', { exact: true })).toBeVisible();
@@ -241,6 +254,7 @@ test('an unavailable index leaves the rest of the static site usable', async ({ 
   await page.goto('./');
   await expect(page.getByText(/collected place index couldn’t load/)).toBeVisible();
   await expect(page.locator('.place-card')).toHaveCount(6);
+  await expect(page.locator('.place-card').first()).not.toBeVisible();
   await searchFor(page, 'Gokarna');
   await expect(page.locator('.web-result').first()).toBeVisible();
 });
@@ -252,10 +266,35 @@ test('official tourism records show their provider and factual source attributio
   fixture.places[0].sources = [{ provider: 'scrapling', publisher: 'Karnataka Tourism', title: 'Test Coastal Cove', url: 'https://karnatakatourism.org/en/attractions/test-cove/', retrievedAt: '2026-10-30T10:00:00Z', license: 'Factual metadata; see source terms' }];
   await page.route('**/data/india-index.json', route => route.fulfill({ json: fixture }));
   await page.goto('./');
-  const index = page.getByRole('region', { name: 'Explore the India place index' });
+  const index = page.getByRole('region', { name: 'Find quieter places' });
   await index.getByText('Collection status', { exact: true }).click();
   await expect(index.getByText('Official tourism websites: ok (1 places)', { exact: true })).toBeVisible();
   await index.getByText('Sources & why it appears', { exact: true }).click();
   await expect(index.locator('.india-source').getByText(/Place name and source link/)).toBeVisible();
   await expect(index.locator('.india-source').getByText(/Text adapted/)).toHaveCount(0);
+});
+
+test('quiet discovery excludes busy, mixed and unknown records even when their old scores are higher', async ({ page }) => {
+  await mockWikimedia(page);
+  const fixture = structuredClone(indexFixture);
+  for (const [id, name, status] of [['busy', 'Om Beach', 'busy'], ['unknown', 'Mirjan Fort', 'unknown'], ['mixed', 'Morning-only Cove', 'mixed']]) {
+    fixture.places.push({ ...fixture.places[0], id, name, discovery: { score: 100 }, crowd: { status, confidence: 'low', evidence: [] } });
+  }
+  await page.route('**/data/india-index.json', route => route.fulfill({ json: fixture }));
+  await page.goto('./');
+  const index = page.getByRole('region', { name: 'Find quieter places' });
+  await expect(index.locator('.india-place h4')).toHaveText(['Test Coastal Cove']);
+  await expect(index.getByText('What supports this')).toBeVisible();
+  await expect(page.locator('.place-card').first()).not.toBeVisible();
+  await searchFor(page, 'less populated places in Gokarna', { general: false });
+  await expect(index.locator('.india-place h4')).toHaveText(['Test Coastal Cove']);
+  await expect(page.locator('.general-guides')).not.toHaveAttribute('open');
+  await page.getByLabel('Crowd evidence').selectOption('all');
+  await expect(index.locator('.india-place')).toHaveCount(4);
+  await searchFor(page, '#hiddenplacegokarna', { general: false });
+  await expect(page.getByLabel('Crowd evidence')).toHaveValue('quieter');
+  await expect(index.locator('.india-place h4')).toHaveText(['Test Coastal Cove']);
+  await searchFor(page, 'Hampi', { general: false });
+  await expect(index.locator('.india-place')).toHaveCount(0);
+  await expect(index.getByText(/don’t have enough specific evidence/)).toBeVisible();
 });
